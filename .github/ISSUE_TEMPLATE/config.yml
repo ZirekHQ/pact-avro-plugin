@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Pact documentation
+    url: https://docs.pact.io
+    about: General Pact usage questions unrelated to Avro support.
+  - name: Pact Foundation Slack
+    url: https://pact-foundation.slack.com
+    about: Community help with Pact and the plugin framework.
