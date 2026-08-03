@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest support for something the plugin doesn't handle yet
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: Describe the contract test you want to write and what stops you writing it today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: schema
+    attributes:
+      label: Avro schema involved
+      description: If this is about an Avro type or feature the plugin doesn't support, include the schema.
+      render: json
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds you have tried
+      description: Anything you have already attempted, including why it wasn't sufficient.
+
+  - type: checkboxes
+    id: upstream
+    attributes:
+      label: Scope check
+      options:
+        - label: I have considered whether this belongs in the Pact plugin framework itself rather than in this plugin
