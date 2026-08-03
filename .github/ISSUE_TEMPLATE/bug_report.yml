@@ -1,0 +1,77 @@
+name: Bug report
+description: Something isn't working as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this. The Avro schema and the failing
+        interaction are almost always the fastest route to a diagnosis, so please
+        include them if you can.
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: The version of pact-avro-plugin you are running.
+      placeholder: "0.0.6"
+    validations:
+      required: true
+
+  - type: input
+    id: pact-implementation
+    attributes:
+      label: Pact implementation and version
+      description: Which Pact library is loading the plugin, and at what version.
+      placeholder: "pact-jvm 4.6.5 / pact-js 13.1.4 / pact-python 2.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: java-version
+    attributes:
+      label: Java version
+      description: Output of `java -version`. The plugin requires Java 17 or later.
+      placeholder: "temurin-21.0.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: side
+    attributes:
+      label: Which side fails
+      options:
+        - Consumer — generating the pact
+        - Provider — verifying the pact
+        - Both
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: schema
+    attributes:
+      label: Avro schema
+      description: The schema involved, reduced to the smallest version that still reproduces the problem.
+      render: json
+
+  - type: textarea
+    id: interaction
+    attributes:
+      label: Pact interaction / plugin configuration
+      description: The `pluginConfiguration` block or DSL calls that set up the interaction.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Plugin or Pact logs. Set the plugin log level to debug if you can.
+      render: shell
