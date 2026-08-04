@@ -8,11 +8,14 @@ import com.github.austek.plugin.avro.utils.MatchingRuleCategoryImplicits.*
 import com.google.protobuf.struct.Value.Kind.*
 import com.google.protobuf.struct.{ListValue as StructListValue, Struct, Value}
 import org.apache.avro.Schema.Type.NULL
-import org.apache.avro.generic.{GenericData, GenericRecord}
+import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericRecord}
+import org.apache.avro.io.DecoderFactory
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util
 import scala.jdk.CollectionConverters.*
 
@@ -195,6 +198,41 @@ class AvroRecordComplexTypesTest extends AnyWordSpecLike with Matchers with Eith
           avroRecord.matchingRules should have size 2
           avroRecord.matchingRules.getRules("$.ages.first") shouldBe List(new NumberTypeMatcher(NumberType.INTEGER))
           avroRecord.matchingRules.getRules("$.ages.second") shouldBe List(new NumberTypeMatcher(NumberType.INTEGER))
+        }
+      }
+    }
+  }
+
+  "Map bytes type field" when {
+    "value provided" should provide {
+      val schema = schemaWithField("""{"name": "hashes","type": { "type": "map", "values": "bytes"}}""")
+      val pactConfiguration: Map[String, Value] = Map(
+        "hashes" -> Value(
+          StructValue(
+            Struct(
+              Map(
+                "sha-256" -> Value(StringValue("matching(equalTo, 'abc123')"))
+              )
+            )
+          )
+        )
+      )
+      val avroRecord = AvroRecord(schema, pactConfiguration).value
+
+      "a method," which {
+        "can be encoded to avro binary and decoded back to the same bytes" in {
+          val bytes = avroRecord.toByteString(schema).value.toByteArray
+          val reader = new GenericDatumReader[GenericRecord](schema)
+          val decoder = DecoderFactory.get.binaryDecoder(bytes, null)
+          val decoded = reader.read(null, decoder)
+          val decodedHashes = decoded.get("hashes").asInstanceOf[util.Map[CharSequence, ByteBuffer]].asScala.map { case (k, v) => k.toString -> v }
+          decodedHashes should contain theSameElementsAs Map(
+            "sha-256" -> ByteBuffer.wrap("abc123".getBytes(StandardCharsets.UTF_8))
+          )
+        }
+        "returns matching rules using JsonPath" in {
+          avroRecord.matchingRules should have size 1
+          avroRecord.matchingRules.getRules("$.hashes.sha-256") shouldBe List(EqualsMatcher.INSTANCE)
         }
       }
     }

@@ -15,6 +15,7 @@ import org.apache.avro.generic.*
 import org.apache.avro.io.EncoderFactory
 
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util
 import scala.annotation.tailrec
@@ -108,7 +109,8 @@ object Avro {
             case LONG    => Try(AvroLong(path, fieldName, fieldValue.asInstanceOf[Long], rules)).toEither
             case NULL    => Right(AvroNull(path, fieldName))
             case STRING  => Try(AvroString(path, fieldName, fieldValue.asInstanceOf[String], rules)).toEither
-            case BYTES | FIXED =>
+            case BYTES   => Try(AvroBytes(path, fieldName, ByteBuffer.wrap(fieldValue.asInstanceOf[Array[Byte]]), rules)).toEither
+            case FIXED =>
               Right(
                 AvroString(path, fieldName, new String(fieldValue.asInstanceOf[Array[Byte]], StandardCharsets.UTF_8), rules)
               )
@@ -126,7 +128,7 @@ object Avro {
     ): Either[PluginError[?], AvroValue] = {
       (schemaType match {
         case BOOLEAN => Right(AvroBoolean(path, fieldName, fieldValue.toLowerCase == "true", rules))
-        case BYTES   => Right(AvroString(path, fieldName, fieldValue, rules))
+        case BYTES   => Right(AvroBytes(path, fieldName, ByteBuffer.wrap(fieldValue.getBytes(StandardCharsets.UTF_8)), rules))
         case DOUBLE  => Try(fieldValue.toDouble).map(v => AvroDouble(path, fieldName, v, rules)).toEither
         case ENUM    => Right(AvroEnum(path, fieldName, fieldValue, rules))
         case FIXED   => Right(AvroString(path, fieldName, fieldValue, rules))
@@ -149,6 +151,15 @@ object Avro {
   case class AvroString(override val path: PactFieldPath, override val name: AvroFieldName, override val value: String, rules: Seq[MatchingRule] = Seq.empty)
       extends AvroValue {
     override type AvroValueType = String
+  }
+
+  case class AvroBytes(
+    override val path: PactFieldPath,
+    override val name: AvroFieldName,
+    override val value: ByteBuffer,
+    rules: Seq[MatchingRule] = Seq.empty
+  ) extends AvroValue {
+    override type AvroValueType = ByteBuffer
   }
 
   case class AvroEnum(override val path: PactFieldPath, override val name: AvroFieldName, override val value: String, rules: Seq[MatchingRule] = Seq.empty)
@@ -213,6 +224,7 @@ object Avro {
                   AvroValue(rootPath, fieldName, schema, singleValue).map {
                     case v: AvroNull    => v.copy(path = v.path :+ index)
                     case v: AvroString  => v.copy(path = v.path :+ index)
+                    case v: AvroBytes   => v.copy(path = v.path :+ index)
                     case v: AvroEnum    => v.copy(path = v.path :+ index)
                     case v: AvroDouble  => v.copy(path = v.path :+ index)
                     case v: AvroFloat   => v.copy(path = v.path :+ index)
