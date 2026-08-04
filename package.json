@@ -8,14 +8,14 @@
     "build": "antora --stacktrace --fetch --clean antora-playbook.yml"
   },
   "devDependencies": {
-    "@asciidoctor/tabs": "1.0.0-beta.3",
-    "antora": "3.1.2",
-    "asciidoctor-kroki": "0.17.0",
-    "rimraf": "~4.4.0"
+    "@asciidoctor/tabs": "1.0.0-beta.6",
+    "antora": "3.1.15",
+    "asciidoctor-kroki": "0.18.1",
+    "rimraf": "~6.1.3"
   },
   "dependencies": {
-    "@antora/lunr-extension": "1.0.0-alpha.8",
-    "@asciidoctor/core": "2.2.6",
+    "@antora/lunr-extension": "1.0.0-alpha.13",
+    "@asciidoctor/core": "2.2.9",
     "asciidoctor-plantuml": "1.5.0"
   }
 }

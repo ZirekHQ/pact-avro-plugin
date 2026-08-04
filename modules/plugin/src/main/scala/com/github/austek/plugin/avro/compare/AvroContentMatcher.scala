@@ -11,7 +11,7 @@ import scala.jdk.CollectionConverters.*
 object AvroContentMatcher extends StrictLogging {
 
   def compare(expected: GenericRecord, actual: GenericRecord, context: MatchingContext): Either[Seq[PluginError[?]], BodyMatchResult] =
-    expected.compare(List("$"), actual)(context).map { result =>
+    expected.compare(List("$"), actual)(using context).map { result =>
       new BodyMatchResult(null, result.asJava)
     }
 }

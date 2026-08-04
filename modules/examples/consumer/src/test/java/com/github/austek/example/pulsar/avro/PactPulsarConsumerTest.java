@@ -128,6 +128,7 @@ class PactPulsarConsumerTest {
 
     return records;
   }
+
   // end::consumer_test[]
 
   private static Order assertFirstOrder(List<Order> orders) {

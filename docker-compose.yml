@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16.4-alpine
+    image: postgres:16.14-alpine
     platform: linux/amd64
     healthcheck:
       test: psql postgres --command "select 1" -U postgres

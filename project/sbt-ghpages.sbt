@@ -1,1 +1,1 @@
-addSbtPlugin("io.kevinlee" % "sbt-github-pages" % "0.14.0")
+addSbtPlugin("io.kevinlee" % "sbt-github-pages" % "0.20.0")

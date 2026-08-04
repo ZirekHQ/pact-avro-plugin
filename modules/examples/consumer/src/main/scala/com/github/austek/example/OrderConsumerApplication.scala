@@ -4,12 +4,14 @@ import com.github.austek.example.config.consumerAppConfig
 import com.github.austek.example.pulsar.avro.OrderConsumerController
 import com.typesafe.scalalogging.StrictLogging
 
-object OrderConsumerApplication extends App with StrictLogging {
+object OrderConsumerApplication extends StrictLogging {
 
-  private val controller = new OrderConsumerController(consumerAppConfig)
+  def main(args: Array[String]): Unit = {
+    val controller = new OrderConsumerController(consumerAppConfig)
 
-  private val count: Int = controller.processOrderMessages(0, () => true)
+    val count: Int = controller.processOrderMessages(0, () => true)
 
-  logger.info(s"Processed $count orders")
+    logger.info(s"Processed $count orders")
+  }
 
 }

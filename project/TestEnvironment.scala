@@ -15,7 +15,7 @@ object TestEnvironment {
         val testPluginDir = target.value / "plugin"
 
         val artifactsDir: File = target.value / "artifacts"
-        val universalStageDir: File = (Universal / stagingDirectory).value
+        val universalStageDir: File = (Universal / com.typesafe.sbt.packager.Keys.stagingDirectory).value
 
         val artifactFiles: Seq[File] = (artifactsDir ** "*.json").get()
         val universalStageFiles: Seq[File] = universalStageDir.allPaths.get()
