@@ -139,7 +139,7 @@ object SchemaFieldImplicits extends StrictLogging {
               (p, expectedValue, actualValue, c) => {
                 expectedValue match {
                   case v: GenericRecord =>
-                    v.compare(p.asScala.toList, actualValue.asInstanceOf[GenericRecord])(c) match {
+                    v.compare(p.asScala.toList, actualValue.asInstanceOf[GenericRecord])(using c) match {
                       case Left(_)      => List.empty.asJava
                       case Right(value) => value.asJava
                     }
@@ -235,7 +235,7 @@ object SchemaFieldImplicits extends StrictLogging {
         context.matchKeys(path.asJava, expectedEntries, actualEntries, () => "").asScala.toList ++
           expectedEntries.asScala.flatMap {
             case (key, value: GenericRecord) if actualEntries.containsKey(key) =>
-              value.compare(path :+ key, actualEntries.get(key).asInstanceOf[GenericRecord])(context) match {
+              value.compare(path :+ key, actualEntries.get(key).asInstanceOf[GenericRecord])(using context) match {
                 case Right(result) => result
                 case Left(errors) =>
                   errors.foreach {

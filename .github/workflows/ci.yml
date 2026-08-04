@@ -15,9 +15,6 @@ on:
     tags: [v*]
 
 env:
-  PACT_BROKER_BASE_URL: 'https://test.pactflow.io'
-  PACT_BROKER_USERNAME: dXfltyFMgNOFZAxr8io9wJ37iUpY42M
-  PACT_BROKER_PASSWORD: O5AIZWxelWbLvqMd8PkAVycBJh2Psyg1
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -26,9 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-2019]
-        scala: [3.5.0]
-        java: [zulu@17, zulu@20]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        scala: [3.8.4]
+        java: [zulu@17, zulu@21, zulu@25]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Ignore line ending differences in git
@@ -38,31 +35,39 @@ jobs:
 
       - name: Configure pagefile for Windows
         if: contains(runner.os, 'windows')
-        uses: al-cheb/configure-pagefile-action@v1.4
+        uses: al-cheb/configure-pagefile-action@v1.5
         with:
           minimum-size: 2GB
           maximum-size: 8GB
           disk-root: 'C:'
 
       - name: Checkout current branch (full)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Java (zulu@17)
         if: matrix.java == 'zulu@17'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: 17
           cache: sbt
 
-      - name: Setup Java (zulu@20)
-        if: matrix.java == 'zulu@20'
-        uses: actions/setup-java@v4
+      - name: Setup Java (zulu@21)
+        if: matrix.java == 'zulu@21'
+        uses: actions/setup-java@v5
         with:
           distribution: zulu
-          java-version: 20
+          java-version: 21
+          cache: sbt
+
+      - name: Setup Java (zulu@25)
+        if: matrix.java == 'zulu@25'
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 25
           cache: sbt
 
       - name: Setup sbt
@@ -70,7 +75,7 @@ jobs:
 
       - name: Check that workflows are up to date
         shell: bash
-        run: sbt '++ ${{ matrix.scala }}' githubWorkflowCheck
+        run: sbt '++ ${{ matrix.scala }}; githubWorkflowCheck'
 
       - name: Set outputs
         id: vars
@@ -79,39 +84,60 @@ jobs:
           echo "sha_short=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_OUTPUT
           echo "git_tag=$(git describe --tags)" >> $GITHUB_OUTPUT
 
-      - name: Pactflow Setup
+      - name: Start pact-broker
+        if: runner.os == 'Linux'
+        shell: bash
+        run: docker compose up -d pact-broker
+
+      - name: Wait for pact-broker
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9292/diagnostic/status/heartbeat > /dev/null; then
+              echo "pact-broker is up"
+              exit 0
+            fi
+            echo "waiting for pact-broker..."
+            sleep 2
+          done
+          echo "pact-broker did not become ready in time" >&2
+          exit 1
+
+      
+      - name: Install pact-broker CLI
+        if: runner.os == 'Linux'
         uses: pactflow/actions@main
 
       - name: Build project
         shell: bash
-        run: sbt '++ ${{ matrix.scala }}' compile scalafmtCheckAll javafmtCheckAll plugin/test
+        run: sbt '++ ${{ matrix.scala }}; compile; scalafmtCheckAll; javafmtCheckAll; plugin/test'
 
       - name: Test Consumer
         shell: bash
-        run: sbt '++ ${{ matrix.scala }}' consumer/test
+        run: sbt '++ ${{ matrix.scala }}; consumer/test'
 
-      - name: Pact publish Windows
-        if: contains(runner.os, 'windows')
-        shell: bash
-        run: pact-broker.bat publish "modules/examples/consumer/target/pacts" --consumer-app-version=${{ steps.vars.outputs.git_tag }}-${{ runner.os }} --tag=${{ steps.vars.outputs.git_tag }}-${{ runner.os }} 
-
-      - name: Pact publish *nix
-        if: '!contains(runner.os, ''windows'')'
+      - name: Pact publish
+        if: runner.os == 'Linux'
+        env:
+          PACT_BROKER_BASE_URL: 'http://localhost:9292'
         shell: bash
         run: pact-broker publish "modules/examples/consumer/target/pacts" --consumer-app-version=${{ steps.vars.outputs.git_tag }}-${{ runner.os }} --tag=${{ steps.vars.outputs.git_tag }}-${{ runner.os }} 
 
       - name: Test Provider
+        if: runner.os == 'Linux'
         env:
+          PACT_BROKER_BASE_URL: 'http://localhost:9292'
           PACT_BROKER_TAG: ${{ steps.vars.outputs.git_tag }}-${{ runner.os }}
         shell: bash
-        run: sbt '++ ${{ matrix.scala }}' provider/test
+        run: sbt '++ ${{ matrix.scala }}; provider/test'
 
       - name: Compress target directories
         shell: bash
         run: tar cf targets.tar target modules/plugin/target modules/examples/provider/target modules/examples/consumer/target project/target
 
       - name: Upload target directories
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: target-${{ matrix.os }}-${{ matrix.scala }}-${{ matrix.java }}
           path: targets.tar
@@ -123,7 +149,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [3.5.0]
+        scala: [3.8.4]
         java: [zulu@17]
     runs-on: ${{ matrix.os }}
     steps:
@@ -133,50 +159,58 @@ jobs:
 
       - name: Configure pagefile for Windows
         if: contains(runner.os, 'windows')
-        uses: al-cheb/configure-pagefile-action@v1.4
+        uses: al-cheb/configure-pagefile-action@v1.5
         with:
           minimum-size: 2GB
           maximum-size: 8GB
           disk-root: 'C:'
 
       - name: Checkout current branch (full)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Java (zulu@17)
         if: matrix.java == 'zulu@17'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: 17
           cache: sbt
 
-      - name: Setup Java (zulu@20)
-        if: matrix.java == 'zulu@20'
-        uses: actions/setup-java@v4
+      - name: Setup Java (zulu@21)
+        if: matrix.java == 'zulu@21'
+        uses: actions/setup-java@v5
         with:
           distribution: zulu
-          java-version: 20
+          java-version: 21
+          cache: sbt
+
+      - name: Setup Java (zulu@25)
+        if: matrix.java == 'zulu@25'
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 25
           cache: sbt
 
       - name: Setup sbt
         uses: sbt/setup-sbt@v1
 
-      - name: Download target directories (3.5.0)
-        uses: actions/download-artifact@v4
+      - name: Download target directories (3.8.4)
+        uses: actions/download-artifact@v8
         with:
-          name: target-${{ matrix.os }}-3.5.0-${{ matrix.java }}
+          name: target-${{ matrix.os }}-3.8.4-${{ matrix.java }}
 
-      - name: Inflate target directories (3.5.0)
+      - name: Inflate target directories (3.8.4)
         run: |
           tar xf targets.tar
           rm targets.tar
 
       - name: Doc - Install node
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v7
         with:
-          node-version: 16.x
+          node-version: 24.x
 
       - name: Doc - Install dependencies
         run: npm ci

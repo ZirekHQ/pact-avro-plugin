@@ -1,3 +1,4 @@
+import com.github.sbt.JavaFormatterPlugin.autoImport.javafmtFormatterCompatibleJavaVersion
 import org.typelevel.sbt.tpolecat.TpolecatPlugin.autoImport.tpolecatExcludeOptions
 import org.typelevel.scalacoptions.ScalacOptions
 import sbt.*
@@ -9,7 +10,7 @@ import java.util
 object BuildSettings {
   private val javaVersion = 17
   private val env: util.Map[String, String] = System.getenv()
-  val scalaV = "3.5.0"
+  val scalaV = "3.8.4"
 
   lazy val basicSettings: Seq[Def.Setting[?]] = Seq(
     homepage := Some(URI.create("https://github.com/austek/pact-avro-plugin").toURL),
@@ -17,7 +18,8 @@ object BuildSettings {
     description := "Pact Avro Plugin",
     scalaVersion := scalaV,
     resolvers += Resolver.mavenLocal,
-    resolvers ++= Resolver.sonatypeOssRepos("releases"),
+    // Keep the formatter running on the same Java baseline as the build itself (see CI matrix: zulu@17, zulu@20)
+    ThisBuild / javafmtFormatterCompatibleJavaVersion := 17,
     javacOptions ++= Seq(
       "-encoding",
       "UTF-8",

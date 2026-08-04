@@ -10,7 +10,7 @@ object PathExpressionImplicits {
         if (path.isEmpty) {
           segment
         } else {
-          constructValidPath(segment, path)
+          constructValidPath(segment, path, true)
         }
       }
     }

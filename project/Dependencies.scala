@@ -4,17 +4,17 @@ import sbt.librarymanagement.syntax.ExclusionRule
 object Dependencies extends DependencyUtils {
 
   object Versions {
-    val assertjCore = "3.26.3"
-    val avro = "1.12.0"
-    val jupiterInterface = "0.13.0"
-    val logback = "1.5.7"
-    val pact = "4.6.14"
-    val pactDriverCore = "0.5.1"
-    val pulsar4sVersion = "2.10.0"
-    val scalacheck = "1.18.0"
-    val scalaLogging = "3.9.5"
-    val scalaTest = "3.2.19"
-    val slf4jApi = "2.0.6"
+    val assertjCore = "3.27.7"
+    val avro = "1.12.1"
+    val jupiterInterface = "0.19.0"
+    val logback = "1.6.1"
+    val pact = "4.7.3"
+    val pactDriverCore = "1.0.0-beta.5"
+    val pulsar4sVersion = "2.12.0"
+    val scalacheck = "1.19.0"
+    val scalaLogging = "3.9.6"
+    val scalaTest = "3.2.20"
+    val slf4jApi = "2.0.18"
   }
 
   // protobuf Dependencies
