@@ -23,9 +23,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-2019]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         scala: [3.8.4]
-        java: [zulu@17, zulu@20]
+        java: [zulu@17, zulu@21, zulu@25]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Ignore line ending differences in git
@@ -54,12 +54,20 @@ jobs:
           java-version: 17
           cache: sbt
 
-      - name: Setup Java (zulu@20)
-        if: matrix.java == 'zulu@20'
+      - name: Setup Java (zulu@21)
+        if: matrix.java == 'zulu@21'
         uses: actions/setup-java@v5
         with:
           distribution: zulu
-          java-version: 20
+          java-version: 21
+          cache: sbt
+
+      - name: Setup Java (zulu@25)
+        if: matrix.java == 'zulu@25'
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 25
           cache: sbt
 
       - name: Setup sbt
@@ -170,12 +178,20 @@ jobs:
           java-version: 17
           cache: sbt
 
-      - name: Setup Java (zulu@20)
-        if: matrix.java == 'zulu@20'
+      - name: Setup Java (zulu@21)
+        if: matrix.java == 'zulu@21'
         uses: actions/setup-java@v5
         with:
           distribution: zulu
-          java-version: 20
+          java-version: 21
+          cache: sbt
+
+      - name: Setup Java (zulu@25)
+        if: matrix.java == 'zulu@25'
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 25
           cache: sbt
 
       - name: Setup sbt

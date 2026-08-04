@@ -1,9 +1,10 @@
 // sbt-github-actions
 
-ThisBuild / githubWorkflowOSes := Seq("ubuntu-latest", "macos-latest", "windows-2019")
+ThisBuild / githubWorkflowOSes := Seq("ubuntu-latest", "macos-latest", "windows-latest")
 ThisBuild / githubWorkflowJavaVersions := Seq(
   JavaSpec.zulu("17"),
-  JavaSpec.zulu("20")
+  JavaSpec.zulu("21"),
+  JavaSpec.zulu("25")
 )
 ThisBuild / githubWorkflowTargetBranches := Seq("main")
 ThisBuild / githubWorkflowTargetTags := Seq("v*")
