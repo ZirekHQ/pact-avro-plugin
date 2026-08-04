@@ -7,15 +7,25 @@ import com.github.austek.plugin.avro.TestSchemas.*
 import com.github.austek.plugin.avro.utils.MatchingRuleCategoryImplicits.*
 import com.google.protobuf.struct.Value
 import com.google.protobuf.struct.Value.Kind.*
+import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
+import org.apache.avro.io.DecoderFactory
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
+
+import java.nio.charset.StandardCharsets
 
 class AvroRecordPrimitiveTypesTest extends AnyWordSpecLike with Matchers with EitherValues {
   import com.github.austek.plugin.avro.utils.MatchingRuleCategoryImplicits.given
 
   private val byteValue = "\\\u0000\\\u0001\\\u0002\\\u0003\\\u0004\\\u0005\\\u0006\\\u0007"
   def provide: AfterWord = afterWord("provide")
+
+  private def decodeRecord(schema: org.apache.avro.Schema, bytes: Array[Byte]): GenericRecord = {
+    val reader = new GenericDatumReader[GenericRecord](schema)
+    val decoder = DecoderFactory.get.binaryDecoder(bytes, null)
+    reader.read(null, decoder)
+  }
 
   "String field" when {
     "value provided" should provide {
@@ -242,12 +252,17 @@ class AvroRecordPrimitiveTypesTest extends AnyWordSpecLike with Matchers with Ei
       "a method," which {
         "returns GenericRecord with field" in {
           val genericRecord = avroRecord.toGenericRecord(schema)
-          genericRecord.get("MAC") shouldBe byteValue
+          genericRecord.get("MAC") shouldBe java.nio.ByteBuffer.wrap(byteValue.getBytes(StandardCharsets.UTF_8))
         }
         "returns matching rules using JsonPath" in {
           avroRecord.matchingRules should have size 1
           val rules = avroRecord.matchingRules.getRules("$.MAC")
           rules shouldBe Seq(EqualsMatcher.INSTANCE)
+        }
+        "can be encoded to avro binary and decoded back to the same bytes" in {
+          val bytes = avroRecord.toByteString(schema).value.toByteArray
+          val decoded = decodeRecord(schema, bytes)
+          decoded.get("MAC") shouldBe java.nio.ByteBuffer.wrap(byteValue.getBytes(StandardCharsets.UTF_8))
         }
       }
     }
@@ -260,7 +275,7 @@ class AvroRecordPrimitiveTypesTest extends AnyWordSpecLike with Matchers with Ei
       "a method," which {
         "returns GenericRecord with field containing default value" in {
           val genericRecord = avroRecord.toGenericRecord(schema)
-          genericRecord.get("MAC") shouldBe "\\u0000"
+          genericRecord.get("MAC") shouldBe java.nio.ByteBuffer.wrap("\\u0000".getBytes(StandardCharsets.UTF_8))
         }
         "returns empty matching rules using JsonPath" in {
           avroRecord.matchingRules shouldBe empty
@@ -278,7 +293,7 @@ class AvroRecordPrimitiveTypesTest extends AnyWordSpecLike with Matchers with Ei
       "a method," which {
         "returns GenericRecord with field" in {
           val genericRecord = avroRecord.toGenericRecord(schema)
-          genericRecord.get("MAC") shouldBe byteValue
+          genericRecord.get("MAC") shouldBe java.nio.ByteBuffer.wrap(byteValue.getBytes(StandardCharsets.UTF_8))
         }
         "returns matching rules using JsonPath" in {
           avroRecord.matchingRules should have size 1

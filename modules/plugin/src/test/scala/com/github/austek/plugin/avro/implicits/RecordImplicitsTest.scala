@@ -13,6 +13,9 @@ import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
+
 class RecordImplicitsTest extends AnyWordSpec with Matchers with EitherValues {
 
   "GenericRecord" when {
@@ -421,9 +424,12 @@ class RecordImplicitsTest extends AnyWordSpec with Matchers with EitherValues {
       val matchingRules: MatchingRuleCategory = avroRecord.matchingRules
       implicit val context: MatchingContext = new MatchingContext(matchingRules, false)
 
+      val expectedBytes = ByteBuffer.wrap("\\\u0000".getBytes(StandardCharsets.UTF_8))
+      val otherBytes = ByteBuffer.wrap("\\\u0001".getBytes(StandardCharsets.UTF_8))
+
       "return empty BodyMatch list for equal fields" in {
         val otherRecord = new GenericData.Record(schema)
-        otherRecord.put("MAC", "\\\u0000")
+        otherRecord.put("MAC", expectedBytes.duplicate())
 
         val result = record.compare(List("$"), otherRecord).value
         result should have size 1
@@ -432,7 +438,7 @@ class RecordImplicitsTest extends AnyWordSpec with Matchers with EitherValues {
 
       "return a BodyMatch for unequal fields" in {
         val otherRecord = new GenericData.Record(schema)
-        otherRecord.put("MAC", "\\\u0001")
+        otherRecord.put("MAC", otherBytes.duplicate())
 
         val result = record.compare(List("$"), otherRecord).value
         result should have size 1
@@ -440,7 +446,7 @@ class RecordImplicitsTest extends AnyWordSpec with Matchers with EitherValues {
           BodyItemMatchResult(
             "$.MAC",
             List(
-              new BodyMismatch("\\\u0000", "\\\u0001", "Expected '\\\u0001' (String) to be equal to '\\\u0000' (String)", "$.MAC", "")
+              new BodyMismatch(expectedBytes, otherBytes, s"Expected $otherBytes (HeapByteBuffer) to be equal to $expectedBytes (HeapByteBuffer)", "$.MAC", "")
             )
           )
         )
@@ -454,7 +460,7 @@ class RecordImplicitsTest extends AnyWordSpec with Matchers with EitherValues {
           BodyItemMatchResult(
             "$.MAC",
             List(
-              new BodyMismatch("\\\u0000", null, "Expected null (Null) to be equal to '\\\u0000' (String)", "$.MAC", "")
+              new BodyMismatch(expectedBytes, null, s"Expected null (Null) to be equal to $expectedBytes (HeapByteBuffer)", "$.MAC", "")
             )
           )
         )

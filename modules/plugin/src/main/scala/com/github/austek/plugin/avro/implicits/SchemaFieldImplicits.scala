@@ -14,6 +14,7 @@ import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.avro.generic.GenericRecord
 import org.apache.avro.util.Utf8
 
+import java.nio.ByteBuffer
 import java.util
 import scala.jdk.CollectionConverters.*
 
@@ -27,8 +28,12 @@ object SchemaFieldImplicits extends StrictLogging {
       (field.schema().getType, other.schema().getType) match {
         case (expectedType, actualType) if expectedType == actualType =>
           expectedType match {
-            case STRING | BYTES =>
+            case STRING =>
               Right(compareValue(path, field, expected.valueOf[String](field.name()), actual.valueOf[String](field.name()), () => "", context))
+            case BYTES =>
+              Right(
+                compareValue(path, field, expected.valueOf[ByteBuffer](field.name()), actual.valueOf[ByteBuffer](field.name()), () => "", context)
+              )
             case INT     => Right(compareValue(path, field, expected.valueOf[Int](field.name()), actual.valueOf[Int](field.name()), () => "", context))
             case LONG    => Right(compareValue(path, field, expected.valueOf[Long](field.name()), actual.valueOf[Long](field.name()), () => "", context))
             case FLOAT   => Right(compareValue(path, field, expected.valueOf[Float](field.name()), actual.valueOf[Float](field.name()), () => "", context))
