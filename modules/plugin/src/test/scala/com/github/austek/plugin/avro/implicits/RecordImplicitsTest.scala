@@ -484,6 +484,23 @@ class RecordImplicitsTest extends AnyWordSpec with Matchers with EitherValues {
         result should have size 1
         result shouldBe List(BodyItemMatchResult("$.street", List()))
       }
+
+      "return a BodyMismatch when Utf8 and String values differ" in {
+        val record = new GenericData.Record(schema)
+        record.put("street", "hello")
+
+        val otherRecord = new GenericData.Record(schema)
+        otherRecord.put("street", new Utf8("world"))
+
+        val result = record.compare(List("$"), otherRecord).value
+        result should have size 1
+        result shouldBe List(
+          BodyItemMatchResult(
+            "$.street",
+            List(new BodyMismatch("hello", new Utf8("world"), "Expected 'hello' (STRING) but received value 'world'", "$.street", ""))
+          )
+        )
+      }
     }
   }
 }
