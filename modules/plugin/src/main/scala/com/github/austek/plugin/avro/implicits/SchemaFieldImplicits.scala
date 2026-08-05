@@ -35,7 +35,7 @@ object SchemaFieldImplicits extends StrictLogging {
               val expectedRecord = expected.get(fieldName).asInstanceOf[GenericRecord]
               Option(actual.get(fieldName).asInstanceOf[GenericRecord]) match {
                 case Some(actualRecord) => expectedRecord.compare(path, actualRecord)
-                case None                => Right(expectedNullMismatch(path, expectedRecord, "Record"))
+                case None               => Right(expectedNullMismatch(path, expectedRecord, "Record"))
               }
             case t =>
               logger.warn(s"Field.compare doesn't support type: $t")
