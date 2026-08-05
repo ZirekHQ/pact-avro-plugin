@@ -21,7 +21,7 @@ logic directly, so they're excluded.
 
 2. **`build.sbt`** (plugin module settings) — add:
    - `coverageMinimumStmtTotal := <baseline>` — value determined by running
-     `sbt plugin/coverage plugin/test plugin/coverageReport` locally and reading the
+     `sbt "coverage; plugin/test; plugin/coverageReport"` locally and reading the
      measured statement coverage, then setting the threshold at or a few points below
      that number. This makes it a real regression guard from day one instead of an
      arbitrary number that immediately fails CI.
@@ -42,9 +42,15 @@ logic directly, so they're excluded.
    config via `sbt-github-actions` (`githubWorkflowGenerate`); CI itself checks the
    generated file is up to date, so it must not be hand-edited.
    - Extend the existing `"Build project"` step's commands to
-     `plugin/coverage`, `compile`, `scalafmtCheckAll`, `javafmtCheckAll`, `plugin/test`,
+     `compile`, `scalafmtCheckAll`, `javafmtCheckAll`, `coverage`, `plugin/test`,
      `plugin/coverageReport` (coverage instrumentation on, then report generated after
-     tests run).
+     tests run). Order matters: `coverage` is a `Command` that sets
+     `ThisBuild / coverageEnabled := true` — it isn't scopable to a project (so
+     `plugin/coverage` is invalid), and enabling it before the aggregate `compile`
+     would instrument `provider`/`consumer` too. Running `coverage` after `compile`
+     has already built everything uninstrumented, then running only `plugin/test`
+     (which recompiles just `plugin`, now instrumented) keeps instrumentation scoped
+     to `plugin` exactly as intended.
    - Add a new `WorkflowStep.Use(UseRef.Public("SonarSource", "sonarqube-scan-action", "v8"))`
      step, gated with `cond = Some("runner.os == 'Linux' && matrix.java == 'zulu@17'")`
      so SonarCloud only receives one analysis submission per commit instead of nine.
@@ -68,7 +74,7 @@ Sonar being configured.
 
 ## Testing / validation
 
-- Run `sbt plugin/coverage plugin/test plugin/coverageReport` locally: confirm tests
+- Run `sbt "coverage; plugin/test; plugin/coverageReport"` locally: confirm tests
   still pass with instrumentation on, and the HTML/XML report generates under
   `modules/plugin/target/scala-3.8.4/scoverage-report/`.
 - Run `sbt githubWorkflowGenerate` and diff `.github/workflows/ci.yml`: it should

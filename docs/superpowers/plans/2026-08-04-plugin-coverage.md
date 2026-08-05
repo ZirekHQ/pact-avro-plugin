@@ -73,7 +73,7 @@ git commit -m "chore: add sbt-scoverage plugin"
 
 ### Task 2: Fix instrumentation-sensitive null/Utf8 handling in the Avro value comparison path
 
-**Why:** see "Plan Amendment" above. Without this fix, `plugin/coverage; plugin/test`
+**Why:** see "Plan Amendment" above. Without this fix, `coverage; plugin/test`
 fails 6 tests that pass under plain `plugin/test`, so no valid coverage baseline can be
 measured (blocks Task 3).
 
@@ -84,11 +84,15 @@ measured (blocks Task 3).
 
 **Interfaces:**
 - Consumes: nothing from Task 1 (this task doesn't touch build config).
-- Produces: a `plugin/coverage; plugin/test` run that is 115/115 green (or however many tests exist after any regression tests are added), consumed by Task 3's baseline measurement.
+- Produces: a `coverage; plugin/test` run that is 115/115 green (or however many tests exist after any regression tests are added), consumed by Task 3's baseline measurement.
 
-**Root cause (confirmed by the Task 2-original implementer, see
-`.superpowers/sdd/2026-08-04-plugin-coverage/task-2-report.md` for full investigation
-notes):**
+**Root cause (confirmed by the Task 2-original implementer):** scoverage instrumentation
+made previously-elided `asInstanceOf` casts real, so a `null` that used to pass through
+untouched could now get forced through primitive unboxing or a genuine `Utf8`-to-`String`
+cast, producing wrong zero-values or a `ClassCastException` depending on bytecode shape.
+The fix removes the casts entirely rather than working around them, since
+`compareValue`'s generic body never actually needed the concrete type — see full detail
+below.
 
 `RecordImplicits.valueOf[T](name: String): T = record.get(name).asInstanceOf[T]` is
 called for every scalar Avro field type (`STRING`, `BYTES`, `INT`, `LONG`, `FLOAT`,
@@ -111,12 +115,12 @@ non-`null` values — this is deterministic regardless of erasure, specializatio
 instrumentation, because `Option(x).map(_.asInstanceOf[T])` only ever invokes the cast
 inside `Some`, never on `null`.
 
-- [ ] **Step 1: Read the current failing behavior**
+- [x] **Step 1: Read the current failing behavior**
 
 Run: `sbt "project plugin; coverage; testOnly com.github.austek.plugin.avro.implicits.RecordImplicitsTest com.github.austek.plugin.avro.PactPluginServiceTest"`
 Expected: reproduces the 6 failures described in the Plan Amendment (missing-Int/Long/Double/Float/Boolean fields return the zero value instead of `null`; one `Utf8`-cast `ClassCastException`). Read `RecordImplicitsTest.scala` around lines 109, 158, 207, 256, 305 to see exactly what each missing-field test expects, and read `PactPluginServiceTest.scala` for the failing case's setup (what record/schema it builds, to understand why a genuine `Utf8` reaches the `STRING` branch there).
 
-- [ ] **Step 2: Add a null-safe accessor to `RecordImplicits`**
+- [x] **Step 2: Add a null-safe accessor to `RecordImplicits`**
 
 In `RecordImplicits.scala`, add alongside the existing `valueOf[T]` (do not delete
 `valueOf` — `SchemaFieldImplicits.compare`'s `RECORD` case and other call sites may
@@ -127,7 +131,7 @@ before deciding whether any other call site needs updating too):
 def valueOfOption[T](name: String): Option[T] = Option(record.get(name)).map(_.asInstanceOf[T])
 ```
 
-- [ ] **Step 3: Route the scalar comparison branches through the null-safe accessor**
+- [x] **Step 3: Route the scalar comparison branches through the null-safe accessor**
 
 In `SchemaFieldImplicits.compare` (lines 28-53), the `STRING`/`BYTES`/`INT`/`LONG`/
 `FLOAT`/`DOUBLE`/`BOOLEAN`/`ENUM`/`FIXED` cases currently call `compareValue` directly
@@ -179,21 +183,21 @@ fields (it was written for `Array`/`Map` — the message says
 `"Expected null (Null) to be equal to '$expected' ($valueType)"`, check this reads
 sensibly for e.g. an `Int`).
 
-- [ ] **Step 4: Run the previously-failing tests under coverage**
+- [x] **Step 4: Run the previously-failing tests under coverage**
 
 Run: `sbt "project plugin; coverage; testOnly com.github.austek.plugin.avro.implicits.RecordImplicitsTest com.github.austek.plugin.avro.PactPluginServiceTest"`
 Expected: all pass. If any still fail, read the new failure carefully — do not
 loosen the test assertions to make them pass; the fix must produce the same
 `null`-vs-missing semantics the tests already encode, just deterministically.
 
-- [ ] **Step 5: Run the full plugin suite, both with and without coverage**
+- [x] **Step 5: Run the full plugin suite, both with and without coverage**
 
 Run: `sbt "plugin/test"` then `sbt "project plugin; coverage; test"`
 Expected: 115/115 (or current total) passing in both runs, byte-for-byte same pass
 count. This is the actual acceptance criterion for this task — instrumented and
 uninstrumented runs must agree.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add modules/plugin/src/main/scala/com/github/austek/plugin/avro/implicits/RecordImplicits.scala modules/plugin/src/main/scala/com/github/austek/plugin/avro/implicits/SchemaFieldImplicits.scala
@@ -204,6 +208,9 @@ If Step 3 required touching test files (e.g. a test's expectation was actually w
 not just instrumentation-sensitive), stage those separately with a clear note in the
 report — do not fold a test-expectation change into this commit silently.
 
+**Status: complete.** Commits `3815cc5..960ec53`, review clean. 115/115 tests pass
+under both `plugin/test` and `coverage; plugin/test`.
+
 ---
 
 ### Task 3: Measure baseline coverage and add threshold gate
@@ -212,12 +219,12 @@ report — do not fold a test-expectation change into this commit silently.
 - Modify: `build.sbt` (the `plugin` project's `.settings(...)` block, alongside the existing `libraryDependencies` and `dependencyOverrides` entries)
 
 **Interfaces:**
-- Consumes: `coverage`/`coverageReport` commands from Task 1; a `plugin/coverage; plugin/test` run that is fully green from Task 2.
-- Produces: `plugin/coverage`, `plugin/test`, `plugin/coverageReport` sequence that later fails the build if statement coverage regresses below the committed threshold — consumed by Task 5's CI step and Task 6's final validation.
+- Consumes: `coverage`/`coverageReport` commands from Task 1; a `coverage; plugin/test` run that is fully green from Task 2.
+- Produces: `coverage`, `plugin/test`, `plugin/coverageReport` sequence that later fails the build if statement coverage regresses below the committed threshold — consumed by Task 5's CI step and Task 6's final validation.
 
-- [ ] **Step 1: Run the instrumented test suite to measure the current baseline**
+- [x] **Step 1: Run the instrumented test suite to measure the current baseline**
 
-Run: `sbt "plugin/coverage; plugin/test; plugin/coverageReport"`
+Run: `sbt "coverage; plugin/test; plugin/coverageReport"`
 Expected: build succeeds, tests pass (all of them — Task 2 must be complete first), and
 the console output ends with a line like:
 ```
@@ -226,7 +233,7 @@ the console output ends with a line like:
 ```
 Note the statement coverage percentage — this is the baseline. The full HTML report is at `modules/plugin/target/scala-3.8.4/scoverage-report/index.html`.
 
-- [ ] **Step 2: Add coverage settings to the `plugin` project**
+- [x] **Step 2: Add coverage settings to the `plugin` project**
 
 In `build.sbt`, inside `lazy val plugin = moduleProject(...)....settings(...)`, add (as a new top-level setting alongside the existing ones, e.g. after `dependencyOverrides`):
 
@@ -238,22 +245,26 @@ In `build.sbt`, inside `lazy val plugin = moduleProject(...)....settings(...)`, 
 
 Replace `<baseline_rounded_down_to_nearest_5>` with the actual number from Step 1, rounded down to the nearest multiple of 5 (e.g. a measured 62.34% becomes `60`). This leaves headroom so the gate doesn't flake on minor coverage noise while still catching real regressions.
 
-- [ ] **Step 3: Verify the gate passes at the committed threshold**
+- [x] **Step 3: Verify the gate passes at the committed threshold**
 
-Run: `sbt "plugin/coverage; plugin/test; plugin/coverageReport"`
+Run: `sbt "coverage; plugin/test; plugin/coverageReport"`
 Expected: build succeeds (exit code 0), no "Coverage is below minimum" error.
 
-- [ ] **Step 4: Verify the gate actually fails below threshold (sanity check)**
+- [x] **Step 4: Verify the gate actually fails below threshold (sanity check)**
 
-Temporarily run: `sbt "plugin/coverage; plugin/test; set plugin/coverageMinimumStmtTotal := 99.0; plugin/coverageReport"`
+Temporarily run: `sbt "coverage; plugin/test; set plugin/coverageMinimumStmtTotal := 99.0; plugin/coverageReport"`
 Expected: build fails with a "Coverage is below minimum" error, confirming the gate is wired correctly. This is a throwaway in-session `set` — it does not modify `build.sbt`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add build.sbt
 git commit -m "chore: enforce minimum statement coverage on plugin module"
 ```
+
+**Status: complete.** Commit `3e63d44` (baseline threshold gate), amended by the final
+fix wave's commit adding `coverageExcludedPackages` and re-baselining the threshold to
+`55` against hand-written-only statement coverage (see final-fix-report.md).
 
 ---
 
@@ -266,7 +277,7 @@ git commit -m "chore: enforce minimum statement coverage on plugin module"
 - Consumes: the scoverage XML report path produced by Task 3's `plugin/coverageReport` (`modules/plugin/target/scala-3.8.4/scoverage-report/scoverage.xml`).
 - Produces: the Sonar project/org keys consumed by Task 5's CI step.
 
-- [ ] **Step 1: Create the properties file**
+- [x] **Step 1: Create the properties file**
 
 ```properties
 sonar.organization=austek
@@ -277,20 +288,22 @@ sonar.sourceEncoding=UTF-8
 sonar.scala.coverage.reportPaths=modules/plugin/target/scala-3.8.4/scoverage-report/scoverage.xml
 ```
 
-- [ ] **Step 2: Verify the referenced report path exists after a coverage run**
+- [x] **Step 2: Verify the referenced report path exists after a coverage run**
 
-Run: `sbt "plugin/coverage; plugin/test; plugin/coverageReport"` (if not already run in this session), then:
+Run: `sbt "coverage; plugin/test; plugin/coverageReport"` (if not already run in this session), then:
 ```bash
 test -f modules/plugin/target/scala-3.8.4/scoverage-report/scoverage.xml && echo "OK: report exists"
 ```
 Expected: prints `OK: report exists`. This confirms the path in `sonar.scala.coverage.reportPaths` is correct — actual Sonar ingestion can't be tested locally without `SONAR_TOKEN` (flagged as a manual step in the spec).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add sonar-project.properties
 git commit -m "chore: add SonarCloud project configuration"
 ```
+
+**Status: complete.** Commit `7d0fff7`, review clean.
 
 ---
 
@@ -301,9 +314,9 @@ git commit -m "chore: add SonarCloud project configuration"
 - Generated (do not hand-edit): `.github/workflows/ci.yml`
 
 **Interfaces:**
-- Consumes: `plugin/coverage`/`plugin/coverageReport` from Task 1/3, `sonar-project.properties` from Task 4.
+- Consumes: `coverage`/`plugin/coverageReport` from Task 1/3, `sonar-project.properties` from Task 4.
 
-- [ ] **Step 1: Extend the "Build project" step to run coverage**
+- [x] **Step 1: Extend the "Build project" step to run coverage**
 
 In `github-actions.sbt`, find:
 
@@ -344,7 +357,7 @@ project's compile, which also builds `provider`/`consumer` (aggregation). Runnin
 touching `provider`/`consumer`) keeps instrumentation scoped to `plugin` exactly as
 Task 3 configured it.
 
-- [ ] **Step 2: Add the SonarCloud scan step**
+- [x] **Step 2: Add the SonarCloud scan step**
 
 In `github-actions.sbt`, after the `"Test Provider"` `WorkflowStep.Sbt` entry (the last element in the `githubWorkflowBuild` `Seq`), add a new element:
 
@@ -359,22 +372,28 @@ In `github-actions.sbt`, after the `"Test Provider"` `WorkflowStep.Sbt` entry (t
 
 Make sure it's a sibling of the existing steps inside the same `Seq(...)` (comma-separated), not nested inside another step.
 
-- [ ] **Step 3: Regenerate the CI workflow**
+- [x] **Step 3: Regenerate the CI workflow**
 
 Run: `sbt githubWorkflowGenerate`
 Expected: `.github/workflows/ci.yml` is rewritten. Run `git diff .github/workflows/ci.yml` and confirm the only changes are: the new `coverage`/`plugin/coverageReport` entries in the "Build project" step's `run` command, and a new "SonarCloud Scan" step using `SonarSource/sonarqube-scan-action@v8` with the `cond`/`env` from Step 2. No other lines should change.
 
-- [ ] **Step 4: Verify the generated workflow is self-consistent**
+- [x] **Step 4: Verify the generated workflow is self-consistent**
 
 Run: `sbt githubWorkflowCheck`
 Expected: exits 0 (this is the same check CI runs to catch hand-edited/stale workflow files).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add github-actions.sbt .github/workflows/ci.yml
 git commit -m "ci: run plugin coverage and SonarCloud scan in CI"
 ```
+
+**Status: complete.** Commits `901cfbd..e0135b7`, review clean. Note: the final fix
+wave's fork-PR mitigation (`continue-on-error` on the SonarCloud step) could not be
+applied — `sbt-github-actions` 0.31.0 (latest available) has no `continue-on-error`
+field on any `WorkflowStep`, so this remains a known limitation; see
+final-fix-report.md.
 
 ---
 
@@ -383,7 +402,7 @@ git commit -m "ci: run plugin coverage and SonarCloud scan in CI"
 **Files:**
 - Modify: `README.adoc`
 
-- [ ] **Step 1: Add the SonarCloud coverage badge**
+- [x] **Step 1: Add the SonarCloud coverage badge**
 
 In `README.adoc`, the current first line is:
 
@@ -397,18 +416,20 @@ Append a second badge image to the same line (space-separated, matching the exis
 = Pact Avro Plugin image:https://github.com/austek/pact-avro-plugin/actions/workflows/ci.yml/badge.svg[Pact-Avro-Plugin Build,link=https://github.com/austek/pact-avro-plugin/actions/workflows/ci.yml] image:https://sonarcloud.io/api/project_badges/measure?project=austek_pact-avro-plugin&metric=coverage[Coverage,link=https://sonarcloud.io/summary/new_code?id=austek_pact-avro-plugin]
 ```
 
-- [ ] **Step 2: Full local validation run**
+- [x] **Step 2: Full local validation run**
 
 Run: `sbt "compile; scalafmtCheckAll; javafmtCheckAll; coverage; plugin/test; plugin/coverageReport; githubWorkflowCheck"`
 Expected: all tasks succeed, exit code 0 — this is the same sequence CI will run (minus the OS-specific pact-broker steps and the Sonar scan, which needs `SONAR_TOKEN`).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add README.adoc
 git commit -m "docs: add SonarCloud coverage badge"
 ```
 
-- [ ] **Step 4: Note remaining manual step for the user**
+- [x] **Step 4: Note remaining manual step for the user**
 
 No file change. Confirm to the user that before merging/pushing, they still need to: create the SonarCloud project (GitHub auto-import) and add `SONAR_TOKEN` as a repo secret, per the spec's "Manual step" section — otherwise the gated Sonar CI leg will fail (the scoverage threshold gate itself is independent and will still work).
+
+**Status: complete.** Commit `ce34ec7`, review clean.
