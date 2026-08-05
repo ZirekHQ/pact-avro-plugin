@@ -320,15 +320,29 @@ Replace with:
   WorkflowStep.Sbt(
     name = Some("Build project"),
     commands = List(
-      "plugin/coverage",
       "compile",
       "scalafmtCheckAll",
       "javafmtCheckAll",
+      "coverage",
       "plugin/test",
       "plugin/coverageReport"
     )
   ),
 ```
+
+**Why `"coverage"` (bare) instead of `"plugin/coverage"`, and why it comes after
+`compile`/format checks instead of first:** Task 3's implementer discovered
+`plugin/coverage` is invalid sbt syntax — `coverage` is an sbt **Command** (it sets
+`ThisBuild / coverageEnabled := true`), not a scopable task/setting key, so it cannot
+take a `project/` prefix at all; it's already build-wide by design. Ordering matters
+because of that build-wide scope: `compile` in this same step is the root aggregate
+project's compile, which also builds `provider`/`consumer` (aggregation). Running
+`coverage` before `compile` would instrument `provider`/`consumer` too, violating the
+"scope is `modules/plugin` only" constraint. Running `coverage` after the plain
+`compile` has already built everything uninstrumented, then only running `plugin/test`
+(which triggers `plugin`'s own incremental recompile, now instrumented, without
+touching `provider`/`consumer`) keeps instrumentation scoped to `plugin` exactly as
+Task 3 configured it.
 
 - [ ] **Step 2: Add the SonarCloud scan step**
 
@@ -348,7 +362,7 @@ Make sure it's a sibling of the existing steps inside the same `Seq(...)` (comma
 - [ ] **Step 3: Regenerate the CI workflow**
 
 Run: `sbt githubWorkflowGenerate`
-Expected: `.github/workflows/ci.yml` is rewritten. Run `git diff .github/workflows/ci.yml` and confirm the only changes are: the new `plugin/coverage`/`plugin/coverageReport` entries in the "Build project" step's `run` command, and a new "SonarCloud Scan" step using `SonarSource/sonarqube-scan-action@v8` with the `cond`/`env` from Step 2. No other lines should change.
+Expected: `.github/workflows/ci.yml` is rewritten. Run `git diff .github/workflows/ci.yml` and confirm the only changes are: the new `coverage`/`plugin/coverageReport` entries in the "Build project" step's `run` command, and a new "SonarCloud Scan" step using `SonarSource/sonarqube-scan-action@v8` with the `cond`/`env` from Step 2. No other lines should change.
 
 - [ ] **Step 4: Verify the generated workflow is self-consistent**
 
@@ -385,7 +399,7 @@ Append a second badge image to the same line (space-separated, matching the exis
 
 - [ ] **Step 2: Full local validation run**
 
-Run: `sbt "compile; scalafmtCheckAll; javafmtCheckAll; plugin/coverage; plugin/test; plugin/coverageReport; githubWorkflowCheck"`
+Run: `sbt "compile; scalafmtCheckAll; javafmtCheckAll; coverage; plugin/test; plugin/coverageReport; githubWorkflowCheck"`
 Expected: all tasks succeed, exit code 0 — this is the same sequence CI will run (minus the OS-specific pact-broker steps and the Sonar scan, which needs `SONAR_TOKEN`).
 
 - [ ] **Step 3: Commit**
