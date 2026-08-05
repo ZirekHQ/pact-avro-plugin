@@ -1,4 +1,4 @@
-= Pact Avro Plugin image:https://github.com/austek/pact-avro-plugin/actions/workflows/ci.yml/badge.svg[Pact-Avro-Plugin Build,link=https://github.com/austek/pact-avro-plugin/actions/workflows/ci.yml]
+= Pact Avro Plugin image:https://github.com/austek/pact-avro-plugin/actions/workflows/ci.yml/badge.svg[Pact-Avro-Plugin Build,link=https://github.com/austek/pact-avro-plugin/actions/workflows/ci.yml] image:https://sonarcloud.io/api/project_badges/measure?project=austek_pact-avro-plugin&metric=coverage[Coverage,link=https://sonarcloud.io/summary/new_code?id=austek_pact-avro-plugin]
 
 ____
 Pact plugin for testing messages serialised by https://avro.apache.org/docs[Apache Avro] using the https://docs.pact.io[Pact] contract testing framework.
