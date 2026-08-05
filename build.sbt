@@ -38,9 +38,9 @@ lazy val plugin = moduleProject("plugin", "plugin")
         Dependencies.protobuf(scalaPB) ++
         Dependencies.test(scalaTest),
     dependencyOverrides ++= Seq(grpcApi, grpcCore, grpcNetty),
-    coverageMinimumStmtTotal := 10,
-    coverageFailOnMinimum := true,
-    coverageHighlighting := true
+    coverageExcludedPackages := "io\\.pact\\.plugin\\..*",
+    coverageMinimumStmtTotal := 55,
+    coverageFailOnMinimum := true
   )
 lazy val pluginRef = LocalProject("plugin")
 
