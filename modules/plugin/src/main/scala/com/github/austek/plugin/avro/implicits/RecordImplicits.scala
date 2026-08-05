@@ -48,7 +48,8 @@ object RecordImplicits extends StrictLogging {
       outputStream.toByteArray
     }
 
-    def valueOf[T](name: String): T = record.get(name).asInstanceOf[T]
+    // Deliberately untyped: casting to a concrete type would unbox a missing field's null to a primitive zero, or fail on Avro's Utf8 vs String.
+    def valueOf(name: String): Any = record.get(name)
 
     def compare(
       path: List[String],

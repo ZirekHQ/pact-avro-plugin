@@ -111,7 +111,7 @@ jobs:
 
       - name: Build project
         shell: bash
-        run: sbt '++ ${{ matrix.scala }}; compile; scalafmtCheckAll; javafmtCheckAll; plugin/test'
+        run: sbt '++ ${{ matrix.scala }}; compile; scalafmtCheckAll; javafmtCheckAll; coverage; plugin/test; plugin/coverageReport'
 
       - name: Test Consumer
         shell: bash
@@ -131,6 +131,12 @@ jobs:
           PACT_BROKER_TAG: ${{ steps.vars.outputs.git_tag }}-${{ runner.os }}
         shell: bash
         run: sbt '++ ${{ matrix.scala }}; provider/test'
+
+      - name: SonarCloud Scan
+        if: runner.os == 'Linux' && matrix.java == 'zulu@17'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        uses: SonarSource/sonarqube-scan-action@v8
 
       - name: Compress target directories
         shell: bash
