@@ -9,6 +9,7 @@ import com.github.austek.plugin.avro.matchers.BodyItemMatchResult
 import com.google.protobuf.struct.Value
 import com.google.protobuf.struct.Value.Kind.*
 import org.apache.avro.generic.GenericData
+import org.apache.avro.util.Utf8
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -462,6 +463,41 @@ class RecordImplicitsTest extends AnyWordSpec with Matchers with EitherValues {
             List(
               new BodyMismatch(expectedBytes, null, s"Expected null (Null) to be equal to $expectedBytes (HeapByteBuffer)", "$.MAC", "")
             )
+          )
+        )
+      }
+    }
+
+    "comparing String fields without a matching rule" should {
+      val schema = schemaWithField("""{"name": "street", "type": "string"}""")
+
+      implicit val context: MatchingContext = new MatchingContext(new MatchingRuleCategory("body"), false)
+
+      "return empty BodyMatch list when Utf8 and String values are textually equal" in {
+        val record = new GenericData.Record(schema)
+        record.put("street", "hello")
+
+        val otherRecord = new GenericData.Record(schema)
+        otherRecord.put("street", new Utf8("hello"))
+
+        val result = record.compare(List("$"), otherRecord).value
+        result should have size 1
+        result shouldBe List(BodyItemMatchResult("$.street", List()))
+      }
+
+      "return a BodyMismatch when Utf8 and String values differ" in {
+        val record = new GenericData.Record(schema)
+        record.put("street", "hello")
+
+        val otherRecord = new GenericData.Record(schema)
+        otherRecord.put("street", new Utf8("world"))
+
+        val result = record.compare(List("$"), otherRecord).value
+        result should have size 1
+        result shouldBe List(
+          BodyItemMatchResult(
+            "$.street",
+            List(new BodyMismatch("hello", new Utf8("world"), "Expected 'hello' (STRING) but received value 'world'", "$.street", ""))
           )
         )
       }

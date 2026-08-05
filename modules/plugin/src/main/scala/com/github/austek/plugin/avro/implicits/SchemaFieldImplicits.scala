@@ -32,7 +32,11 @@ object SchemaFieldImplicits extends StrictLogging {
             case MAP   => Right(compareMapField(path, expected, actual, context))
             case RECORD =>
               val fieldName = path.last
-              expected.get(fieldName).asInstanceOf[GenericRecord].compare(path, actual.get(fieldName).asInstanceOf[GenericRecord])
+              val expectedRecord = expected.get(fieldName).asInstanceOf[GenericRecord]
+              Option(actual.get(fieldName).asInstanceOf[GenericRecord]) match {
+                case Some(actualRecord) => expectedRecord.compare(path, actualRecord)
+                case None               => Right(expectedNullMismatch(path, expectedRecord, "Record"))
+              }
             case t =>
               logger.warn(s"Field.compare doesn't support type: $t")
               Right(List.empty)
@@ -253,6 +257,11 @@ object SchemaFieldImplicits extends StrictLogging {
       }
     }
 
+    private def normalizeUtf8(value: Any): Any = value match {
+      case s: Utf8 => s.toString
+      case _       => value
+    }
+
     private def compareValue[T](
       path: List[String],
       field: Schema.Field,
@@ -266,14 +275,8 @@ object SchemaFieldImplicits extends StrictLogging {
       if (context.matcherDefined(path.asJava)) {
         logger.debug(s"compareValue: Matcher defined for path $path")
 
-        val expectedJava = expected match {
-          case s: Utf8 => s.toString
-          case _       => expected
-        }
-        val actualJava = actual match {
-          case s: Utf8 => s.toString
-          case _       => actual
-        }
+        val expectedJava = normalizeUtf8(expected)
+        val actualJava = normalizeUtf8(actual)
 
         List(
           new AvroBodyItemMatchResult(
@@ -290,7 +293,7 @@ object SchemaFieldImplicits extends StrictLogging {
         )
       } else {
         logger.debug(s"compareValue: No matcher defined for path $path, using equality")
-        if (expected == actual) {
+        if (normalizeUtf8(expected) == normalizeUtf8(actual)) {
           List(BodyItemMatchResult(valuePath, List()))
         } else {
           List(
