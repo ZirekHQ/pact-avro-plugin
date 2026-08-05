@@ -52,7 +52,14 @@ ThisBuild / githubWorkflowBuild := Seq(
   ),
   WorkflowStep.Sbt(
     name = Some("Build project"),
-    commands = List("compile", "scalafmtCheckAll", "javafmtCheckAll", "plugin/test")
+    commands = List(
+      "compile",
+      "scalafmtCheckAll",
+      "javafmtCheckAll",
+      "coverage",
+      "plugin/test",
+      "plugin/coverageReport"
+    )
   ),
   WorkflowStep.Sbt(
     name = Some("Test Consumer"),
@@ -76,6 +83,12 @@ ThisBuild / githubWorkflowBuild := Seq(
       "PACT_BROKER_BASE_URL" -> "http://localhost:9292",
       "PACT_BROKER_TAG" -> "${{ steps.vars.outputs.git_tag }}-${{ runner.os }}",
     )
+  ),
+  WorkflowStep.Use(
+    UseRef.Public("SonarSource", "sonarqube-scan-action", "v8"),
+    name = Some("SonarCloud Scan"),
+    cond = Some("runner.os == 'Linux' && matrix.java == 'zulu@17'"),
+    env = Map("SONAR_TOKEN" -> "${{ secrets.SONAR_TOKEN }}")
   )
 )
 
