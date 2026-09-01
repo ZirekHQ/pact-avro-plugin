@@ -1,26 +1,11 @@
-[#overview]
-= Overview
+= pact-avro-plugin
 
-This plugin provides matching and verification of Avro serialised messages to the Pact contract testing framework. It requires a version of the Pact framework that supports the https://github.com/pact-foundation/pact-specification/tree/version-4[V4 Pact specification]
-as well as the https://github.com/pact-foundation/pact-plugins[Pact plugin framework].
+A https://docs.pact.io[Pact] plugin for testing messages serialised with
+https://avro.apache.org/docs[Apache Avro], using the Pact contract testing framework.
 
-Supported Pact framework versions:
+NOTE: Unlike the rest of the org's repos, this isn't an accessibility/TTS project -- it's a
+general-purpose contract-testing plugin. Worth deciding whether it belongs in the ZirekHQ docs
+site at all, or should stay out of the org-wide aggregation.
 
-- https://github.com/pact-foundation/pact-jvm[Pact-JVM v4.6.x] / JDK 17+
-- https://github.com/pact-foundation/pact-reference/tree/master/rust/pact_consumer[Pact-Rust Consumer v0.9.x]
-- https://github.com/pact-foundation/pact-reference/tree/master/rust/pact_verifier_cli[Pact-Rust Verifier v0.9.x]
-- https://github.com/pact-foundation/pact-go[Pact-Go v2.0.0]
-
-
-== Supported features
-
-* Avro over HTTP
-
-== Unsupported features
-
-* Avro over RPC
-
-== Support
-
-Join us on slack image:https://slack.pact.io/badge.svg[slack,link=https://slack.pact.io] in the *#avro* channel
-
+Docs spike: this component is aggregated into the org-wide
+https://zirekhq.github.io[ZirekHQ documentation site].
