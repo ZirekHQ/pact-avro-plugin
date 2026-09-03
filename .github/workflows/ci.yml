@@ -84,15 +84,21 @@ jobs:
           echo "sha_short=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_OUTPUT
           echo "git_tag=$(git describe --tags)" >> $GITHUB_OUTPUT
 
+      - name: Setup protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Build and test Rust plugin
         shell: bash
         run: |
           cd modules/plugin-rs
+          cargo fmt --check
           cargo build --verbose
           cargo test --verbose
           cargo clippy --all-targets -- -D warnings

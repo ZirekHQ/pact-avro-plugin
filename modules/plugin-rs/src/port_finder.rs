@@ -4,7 +4,7 @@ use std::net::TcpListener;
 /// port that was actually bound, then releases it. `None` on any bind or
 /// lookup failure, matching the Scala version's Option-based signature.
 pub fn find_free_port() -> Option<u16> {
-    TcpListener::bind(("0.0.0.0", 0))
+    TcpListener::bind(("127.0.0.1", 0))
         .and_then(|listener| listener.local_addr())
         .map(|addr| addr.port())
         .ok()
