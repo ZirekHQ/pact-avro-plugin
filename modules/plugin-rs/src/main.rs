@@ -32,6 +32,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn shutdown_signal() {
     let ctrl_c = async {
+        // Signal-handler registration failing at startup is unrecoverable —
+        // without it the process can't shut down cleanly.
         tokio::signal::ctrl_c()
             .await
             .expect("failed to install Ctrl-C handler");
@@ -39,6 +41,8 @@ async fn shutdown_signal() {
 
     #[cfg(unix)]
     let terminate = async {
+        // Signal-handler registration failing at startup is unrecoverable —
+        // without it the process can't shut down cleanly.
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
             .expect("failed to install SIGTERM handler")
             .recv()
