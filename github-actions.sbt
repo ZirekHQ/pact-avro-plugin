@@ -22,6 +22,20 @@ ThisBuild / githubWorkflowBuild := Seq(
       """echo "git_tag=$(git describe --tags)" >> $GITHUB_OUTPUT"""
     )
   ),
+  WorkflowStep.Use(
+    UseRef.Public("dtolnay", "rust-toolchain", "stable"),
+    name = Some("Setup Rust toolchain"),
+    params = Map("components" -> "clippy")
+  ),
+  WorkflowStep.Run(
+    name = Some("Build and test Rust plugin"),
+    commands = List(
+      "cd modules/plugin-rs",
+      "cargo build --verbose",
+      "cargo test --verbose",
+      "cargo clippy --all-targets -- -D warnings"
+    )
+  ),
   // Service containers only run on Linux GitHub-hosted runners, so the pact-broker
   // (and pact publish / provider verification against it) only runs on ubuntu-latest.
   // macOS and Windows legs still compile and run the plugin/consumer test suites.

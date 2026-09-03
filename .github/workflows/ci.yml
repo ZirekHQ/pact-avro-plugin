@@ -84,6 +84,19 @@ jobs:
           echo "sha_short=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_OUTPUT
           echo "git_tag=$(git describe --tags)" >> $GITHUB_OUTPUT
 
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Build and test Rust plugin
+        shell: bash
+        run: |
+          cd modules/plugin-rs
+          cargo build --verbose
+          cargo test --verbose
+          cargo clippy --all-targets -- -D warnings
+
       - name: Start pact-broker
         if: runner.os == 'Linux'
         shell: bash
