@@ -129,7 +129,10 @@ mod tests {
         assert_eq!(response.catalogue.len(), 1);
         let entry = &response.catalogue[0];
         assert_eq!(entry.key, "avro");
-        assert_eq!(entry.r#type, catalogue_entry::EntryType::ContentMatcher as i32);
+        assert_eq!(
+            entry.r#type,
+            catalogue_entry::EntryType::ContentMatcher as i32
+        );
         assert_eq!(
             entry.values.get("content-types").map(String::as_str),
             Some("application/avro;avro/bytes;avro/binary;application/*+avro")
