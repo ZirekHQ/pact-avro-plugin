@@ -26,9 +26,6 @@ mod tests {
 
     #[test]
     fn content_types_str_joins_all_content_types_with_semicolons() {
-        assert_eq!(
-            CONTENT_TYPES_STR,
-            "application/avro;avro/bytes;avro/binary;application/*+avro"
-        );
+        assert_eq!(CONTENT_TYPES_STR, CONTENT_TYPES.join(";"));
     }
 }

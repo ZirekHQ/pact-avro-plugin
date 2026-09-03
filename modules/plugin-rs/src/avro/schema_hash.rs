@@ -21,7 +21,9 @@ mod tests {
     #[test]
     fn hash_is_lowercase_hex() {
         let hash = base16_hash("{\"type\":\"record\"}");
-        assert!(hash.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(hash
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
         assert_eq!(hash.len(), 32);
     }
 }

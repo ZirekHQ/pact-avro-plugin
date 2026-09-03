@@ -1,4 +1,5 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo:rerun-if-changed=../plugin/src/main/protobuf/pact-plugin.proto");
     tonic_prost_build::configure()
         .build_client(false)
         .build_server(true)
