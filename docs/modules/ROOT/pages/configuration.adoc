@@ -1,0 +1,96 @@
+= Configuration Reference
+
+This page lists every configuration key the plugin reads, where it applies, and what happens if it is missing.
+
+== Content types
+
+The plugin registers itself as a `CONTENT_MATCHER` for these content types:
+
+* `application/avro`
+* `avro/bytes`
+* `avro/binary`
+* `application/*+avro`
+
+Any interaction configured with one of these content types is routed to this plugin. Interactions are also tagged with the record name they carry, using the format `<content-type>;record=<RecordName>` (for example `avro/binary;record=Order`). The actual and expected bodies of an interaction must resolve to the same record name, or the comparison fails.
+
+== Interaction configuration keys
+
+These keys are read from the `message.contents` (or equivalent) map passed to `usingPlugin("avro")` when a consumer test defines an interaction.
+
+[cols="1,1,3"]
+|===
+|Key |Required |Description
+
+|`pact:avro`
+|Yes
+|Path to the Avro schema file (`.avsc`) to use for this interaction. The file can define a single record or an array of record definitions.
+
+|`pact:record-name`
+|Yes
+|Name of the record within the schema file to use for this interaction. If the schema is a union/array of records, the plugin searches it for a record with this name.
+
+|`pact:content-type`
+|No
+|Overrides the content type reported for the interaction body. Defaults to one of the content types listed above based on how the interaction was configured.
+|===
+
+If `pact:avro` is missing, configuration fails with:
+
+....
+Config item with key 'pact:avro' and path to the avro schema file is required
+....
+
+If `pact:record-name` is missing, configuration fails with:
+
+....
+Config item with key 'pact:record-name' and record-name of the payload is required
+....
+
+== Field configuration
+
+Every other key in the configuration map is treated as a field on the record, and its value is parsed as a https://github.com/pact-foundation/pact-plugins/blob/main/docs/matching-rule-definition-expressions.md[Matching Rule definition expression] (for example `notEmpty('100')` or `matching(boolean, true)`). See xref:testing.adoc[] for worked examples.
+
+Fields can be nested to match the schema shape:
+
+* A record-typed field is configured as a map, keyed by its own field names.
+* An array-typed field is configured as a list of matching rule expressions (or of maps, for arrays of records).
+* A map-typed field is configured as a map, keyed by the map's own keys.
+
+=== Optional (nullable) fields
+
+A field is only treated as optional when its Avro type is a two-branch union with `null` as one of the branches (for example `["null", "string"]`). If you omit a value for that field in the test configuration, the plugin uses `null`.
+
+Any other union shape (more than two branches, or a two-branch union without `null`) is rejected with:
+
+....
+'UNION' type is only supported to make field nullable, field: '<field>' with value: '<value>'
+....
+
+=== Fields with schema defaults
+
+If a field is omitted from the test configuration and the schema declares a default value for it, that default is used instead of failing. If the field has no default and no union-with-null fallback, configuration fails with:
+
+....
+Couldn't find configuration for field: <field>
+....
+
+== Supported field types
+
+The plugin can build and match: `string`, `int`, `long`, `float`, `double`, `boolean`, `bytes`, `fixed`, `enum`, `null`, `record`, `array`, and `map`. Any other Avro type used on a field fails with:
+
+....
+Type '<type>' is not supported for field: '<field>' with value: '<value>'
+....
+
+== Environment variables
+
+[cols="1,3"]
+|===
+|Variable |Description
+
+|`PACT_PLUGIN_DIR`
+|Overrides the plugin install directory. Defaults to `$HOME/.pact/plugins`. See xref:getting_started.adoc[].
+
+|`LOG_LEVEL`
+|Sets the plugin's log level. Defaults to `ERROR`. See xref:logging.adoc[].
+|===

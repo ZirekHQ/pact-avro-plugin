@@ -1,3 +1,6 @@
 * xref:getting_started.adoc[]
-* xref:logging.adoc[]
+* xref:configuration.adoc[]
 * xref:testing.adoc[]
+* xref:schema_compatibility.adoc[]
+* xref:logging.adoc[]
+* xref:troubleshooting.adoc[]
