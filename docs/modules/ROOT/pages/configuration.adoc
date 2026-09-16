@@ -28,11 +28,9 @@ These keys are read from the `message.contents` (or equivalent) map passed to `u
 |`pact:record-name`
 |Yes
 |Name of the record within the schema file to use for this interaction. If the schema is a union/array of records, the plugin searches it for a record with this name.
-
-|`pact:content-type`
-|No
-|Overrides the content type reported for the interaction body. Defaults to one of the content types listed above based on how the interaction was configured.
 |===
+
+The emitted interaction body always reports `avro/binary;record=<RecordName>` as its content type; there is no configuration key to override it.
 
 If `pact:avro` is missing, configuration fails with:
 
