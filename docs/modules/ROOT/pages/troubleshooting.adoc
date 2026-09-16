@@ -1,0 +1,73 @@
+= Troubleshooting & FAQ
+
+== Turn on debug logging first
+
+The plugin logs full detail (including stack traces for schema parsing and serialisation failures) at `DEBUG`, but only returns a short message to the Pact framework. Set `LOG_LEVEL=DEBUG` in the environment that launches the plugin process and check `log/plugin.log` in the plugin directory (or standard output) before digging further. See xref:logging.adoc[].
+
+If a response says `Multiple errors detected and logged, please check logs`, the individual causes are only in the log file, not in the error returned to your test framework.
+
+== Common errors
+
+[cols="2,3"]
+|===
+|Error |Cause and fix
+
+|`Configuration not found`
+|The interaction was configured with no `contentsConfig` at all. Make sure your test builder actually passes a configuration map for the message/request body.
+
+|`Config item with key 'pact:avro' and path to the avro schema file is required`
+|`pact:avro` is missing from the interaction configuration, or blank. Add it, pointing at your `.avsc` file. See xref:configuration.adoc[].
+
+|`Config item with key 'pact:record-name' and record-name of the payload is required`
+|`pact:record-name` is missing or blank. Add it with the exact record name from the schema.
+
+|`Failed to parse avro schema from file: <path>`
+|The path in `pact:avro` does not exist, is not readable, or is not valid Avro schema JSON. Confirm the path is correct and absolute (or resolved relative to a known working directory) at test-run time.
+
+|`Failed to parse avro schema from string`
+|The schema embedded in the Pact file (looked up by `schemaKey` during verification) is not valid JSON. This usually means the Pact file was hand-edited or produced by an incompatible plugin version.
+
+|`Record '<name>' was not found in avro Schema provided` / `Avro union schema didn't contain record: '<name>'`
+|`pact:record-name` does not match any record defined in the schema file. Check spelling and, for multi-record schema files, that the record is actually present.
+
+|`Interaction configuration not found` / `Pact configuration not found`
+|The interaction being verified was not built by this plugin, or the Pact file's `pluginConfiguration` was stripped (for example by hand-editing the file, or by a broker/tool that does not round-trip plugin data). Regenerate the Pact file from the consumer test.
+
+|`Plugin configuration item with key 'schemaKey' is required` / `Plugin Avro Schema configuration item with key '<hash>' is required` / `Avro Schema configuration item with key 'avroSchema' is required`
+|The embedded schema lookup described in xref:schema_compatibility.adoc[] failed: the interaction's `schemaKey` is missing, or no matching entry exists in the Pact file's `pactConfiguration`. This points at a corrupted or manually assembled Pact file rather than a schema authoring mistake.
+
+|`Record names don't match, actual: '<a>' expected: '<b>'`
+|The actual and expected interaction bodies were tagged with different record names in their content type. This points at a mismatch between the consumer test and the provider/mock response, not the schema itself.
+
+|`<content> body is not one of 'application/avro;avro/bytes;avro/binary;application/*+avro' content type` / `... content didn't match expected template of 'content/type; record=NameOfRecord'`
+|The interaction's content type is not one this plugin owns, or is missing the `;record=<Name>` suffix. Confirm the interaction was configured through this plugin and its content type was not overwritten downstream.
+
+|`'UNION' type is only supported to make field nullable, field: '<field>' with value: '<value>'`
+|The field's Avro type is a union that is not a simple two-branch `[null, T]` pair. This plugin only supports unions for optional fields; restructure the schema or split the field. See xref:schema_compatibility.adoc[].
+
+|`A valid schema wasn't find for field: '<field>' with value: '<value>'`
+|A nullable (union) field could not resolve a non-null branch to validate against. Check the union only has one non-null type.
+
+|`Couldn't find configuration for field: <field>`
+|A required field (no default value, not nullable) was left out of the test configuration. Add a matching rule expression for it, or give the field a default/make it nullable in the schema.
+
+|`Type '<type>' is not supported for field: '<field>' with value: '<value>'`
+|The field's Avro type is not one of `string`, `int`, `long`, `float`, `double`, `boolean`, `bytes`, `fixed`, `enum`, `null`, `record`, `array`, `map`. Change the schema to use a supported type.
+
+|`'<value>' is not a valid matching rule definition - <detail>` / `Rule '<rule>' not supported for now`
+|The string given for a field is not a valid https://github.com/pact-foundation/pact-plugins/blob/main/docs/matching-rule-definition-expressions.md[Matching Rule definition expression], or uses a rule type this plugin does not implement yet. Compare against the working examples in xref:testing.adoc[].
+|===
+
+== FAQ
+
+Why does my test fail with an error instead of a normal assertion failure?::
+Configuration problems (missing/invalid schema, missing fields, unsupported types) are detected while the plugin builds the interaction or compares content, before any matching happens. They come back as a plugin `error` string rather than a per-field mismatch.
+
+Do I need the schema registry running to verify a provider?::
+No. This plugin has no external schema registry integration. The schema used at verification time is the one embedded in the Pact file at consumer-test time (see xref:schema_compatibility.adoc[]), not a schema fetched from a registry or re-read from disk.
+
+Can I use `matching(regex, ...)` or other Pact matchers?::
+Field values are parsed as standard Pact Matching Rule definition expressions, so any expression the Pact plugin framework's rule parser understands is expected to work; unsupported rule types fail with `Rule '<rule>' not supported for now`. If you hit that, check the linked matching-rule-definition-expressions documentation and open an issue with the expression you tried.
+
+My schema has a field with a three-way union — why is it rejected?::
+The plugin only special-cases the `[null, T]` shape for optional fields. Wider unions are not supported for matching; flatten the schema or split it into separate fields/records.
