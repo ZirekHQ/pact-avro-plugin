@@ -85,13 +85,14 @@ jobs:
           echo "git_tag=$(git describe --tags)" >> $GITHUB_OUTPUT
 
       - name: Setup protoc
-        uses: arduino/setup-protoc@v3
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
+          toolchain: stable
           components: clippy, rustfmt
 
       - name: Build and test Rust plugin
@@ -99,9 +100,9 @@ jobs:
         run: |
           cd modules/plugin-rs
           cargo fmt --check
-          cargo build --verbose
-          cargo test --verbose
-          cargo clippy --all-targets -- -D warnings
+          cargo build --locked --verbose
+          cargo test --locked --verbose
+          cargo clippy --locked --all-targets -- -D warnings
 
       - name: Start pact-broker
         if: runner.os == 'Linux'

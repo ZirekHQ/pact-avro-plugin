@@ -1,8 +1,6 @@
 use pact_avro_plugin::pact_plugin::pact_plugin_server::PactPluginServer;
-use pact_avro_plugin::port_finder::find_free_port;
 use pact_avro_plugin::service::PactAvroPluginService;
 use std::io::Write;
-use std::net::SocketAddr;
 use tokio_stream::wrappers::TcpListenerStream;
 use uuid::Uuid;
 
@@ -16,13 +14,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    let port = find_free_port().unwrap_or(9090);
-    let addr: SocketAddr = ([127, 0, 0, 1], port).into();
-
-    // Bind before announcing the port: printing the handshake for a port we
-    // haven't confirmed we can actually listen on would tell Pact core to
-    // connect to a dead server.
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    // Bind before announcing the port, and keep this listener for serving:
+    // reserving the OS-assigned port here closes the window in which another
+    // process could claim it between lookup and bind.
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
+    let port = listener.local_addr()?.port();
 
     let server_key = Uuid::new_v4();
     // Pact core reads this exact line from stdout to discover how to reach
