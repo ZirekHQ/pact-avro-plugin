@@ -192,7 +192,7 @@ fn leaf_value(schema: &Schema, scalar: &Scalar) -> Result<Value, PluginError> {
         (Schema::Double, Scalar::Double(number)) => Ok(Value::Double(*number)),
         (Schema::String, Scalar::Text(text)) => Ok(Value::String(text.clone())),
         (Schema::Bytes, Scalar::Bytes(bytes)) => Ok(Value::Bytes(bytes.clone())),
-        (Schema::Fixed(fixed), Scalar::Bytes(bytes)) => Ok(Value::Fixed(fixed.size, bytes.clone())),
+        (Schema::Fixed(_), Scalar::Bytes(bytes)) => Ok(Value::Fixed(bytes.len(), bytes.clone())),
         (Schema::Enum(symbols), Scalar::Text(symbol)) => enum_value(symbols, symbol),
         (other, _) => Err(mismatch(other)),
     }
@@ -333,6 +333,21 @@ mod tests {
             panic!("record expected")
         };
         assert_eq!(fields[0].1, Value::Union(1, Box::new(Value::Null)));
+    }
+
+    #[test]
+    fn fixed_value_of_the_wrong_length_fails_to_encode() {
+        let schema = parse_str(
+            r#"{"type":"record","name":"R","fields":[{"name":"h","type":{"type":"fixed","name":"MD5","size":16}}]}"#,
+        )
+        .unwrap();
+        let ctx = SchemaCtx::new(&schema).unwrap();
+        let node = record_node(vec![(
+            "h",
+            leaf("$.h", Scalar::Bytes(vec![1, 2, 3]), vec![]),
+        )]);
+        let value = to_value(&ctx, &schema, &node).unwrap();
+        assert!(encode(&ctx, &schema, value).is_err());
     }
 
     #[test]
