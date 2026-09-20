@@ -1,4 +1,5 @@
 pub mod avro;
+pub mod compare;
 pub mod constants;
 pub mod error;
 pub mod interaction;
