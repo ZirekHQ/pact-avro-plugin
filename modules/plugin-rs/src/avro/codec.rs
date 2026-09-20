@@ -22,10 +22,16 @@ pub fn decode<'a>(
     record: &'a Schema,
     bytes: &[u8],
 ) -> Result<Value, PluginError> {
+    let mut input = bytes;
     GenericDatumReader::builder(record)
         .writer_schemata(vec![ctx.root()])
         .and_then(|builder| builder.build())
-        .and_then(|reader| reader.read_value(&mut &bytes[..]))
+        .and_then(|reader| reader.read_value(&mut input))
+        .map_err(|error| error.to_string())
+        .and_then(|value| match input.len() {
+            0 => Ok(value),
+            extra => Err(format!("{extra} trailing bytes after avro datum")),
+        })
         .map_err(|error| {
             tracing::error!("Failed to deserialize avro schema: {error}");
             PluginError::Message("Failed to deserialize avro schema".to_string())
@@ -66,6 +72,18 @@ mod tests {
         let ctx = SchemaCtx::new(&schema).unwrap();
         let bytes = encode(&ctx, &schema, item("hello", 3)).unwrap();
         assert_eq!(decode(&ctx, &schema, &bytes).unwrap(), item("hello", 3));
+    }
+
+    #[test]
+    fn decode_rejects_bytes_after_the_datum() {
+        let schema = item_schema();
+        let ctx = SchemaCtx::new(&schema).unwrap();
+        let mut bytes = encode(&ctx, &schema, item("hello", 3)).unwrap();
+        bytes.push(0x00);
+        assert_eq!(
+            decode(&ctx, &schema, &bytes).unwrap_err().to_string(),
+            "Failed to deserialize avro schema"
+        );
     }
 
     #[test]

@@ -3,10 +3,10 @@ use crate::avro::path::PactFieldPath;
 use crate::avro::rules::{parse_rules, FieldRule};
 use crate::avro::schema::{Kind, SchemaCtx};
 use crate::error::PluginError;
-use apache_avro::schema::{RecordField, Schema};
+use apache_avro::schema::{RecordField, RecordSchema, Schema};
 use prost_types::value::Kind as ProtoKind;
 use prost_types::Value;
-use serde_json::{Number, Value as Json};
+use serde_json::{Map as JsonMap, Number, Value as Json};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
@@ -42,9 +42,42 @@ fn parse_number<T: FromStr>(text: &str) -> Result<T, PluginError> {
         .map_err(|_| PluginError::Exception(format!("For input string: \"{text}\"")))
 }
 
+fn parse_bool(name: &str, text: &str) -> Result<bool, PluginError> {
+    match text.to_ascii_lowercase().as_str() {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(PluginError::Exception(format!(
+            "Invalid boolean value '{text}' for field '{name}'"
+        ))),
+    }
+}
+
+fn code_point_bytes(name: &str, text: &str) -> Result<Vec<u8>, PluginError> {
+    text.chars()
+        .map(|ch| {
+            u8::try_from(u32::from(ch)).map_err(|_| {
+                PluginError::Exception(format!(
+                    "Invalid bytes default for field '{name}': U+{:04X} is above U+00FF",
+                    u32::from(ch)
+                ))
+            })
+        })
+        .collect()
+}
+
+fn null_not_allowed(name: &str) -> PluginError {
+    PluginError::Message(format!(
+        "Null value is not allowed for non-nullable field '{name}'"
+    ))
+}
+
+fn is_null(value: &Value) -> bool {
+    matches!(value.kind, None | Some(ProtoKind::NullValue(_)))
+}
+
 fn scalar_from_text(kind: Kind, name: &str, text: &str) -> Result<Scalar, PluginError> {
     match kind {
-        Kind::Boolean => Ok(Scalar::Boolean(text.eq_ignore_ascii_case("true"))),
+        Kind::Boolean => parse_bool(name, text).map(Scalar::Boolean),
         Kind::Bytes | Kind::Fixed => Ok(Scalar::Bytes(text.as_bytes().to_vec())),
         Kind::Double => parse_number(text).map(Scalar::Double),
         Kind::Float => parse_number(text).map(Scalar::Float),
@@ -138,6 +171,9 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
         config: Option<&Value>,
     ) -> Built {
         match (self.nullable_branch(&field.schema), config) {
+            (Some(_), Some(value)) if is_null(value) => {
+                Ok(Node::null_leaf(path.field(&field.name)))
+            }
             (Some(branch), Some(value)) => self.configured(path, &field.name, branch, value),
             (Some(branch), None) => self.default_value(path, field, branch),
             (None, value) => Err(one(PluginError::field_not_nullable(
@@ -182,7 +218,7 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
             | Kind::Bytes
             | Kind::Null => self.value(path, name, schema, config, true),
             Kind::Record => self.record(
-                &path.append(name),
+                &path.field(name),
                 self.ctx.resolve(schema),
                 &struct_fields(config),
             ),
@@ -213,7 +249,7 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
         append: bool,
     ) -> Built {
         let leaf_path = if append {
-            path.append(name)
+            path.field(name)
         } else {
             path.clone()
         };
@@ -264,12 +300,9 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
     }
 
     fn array(&self, path: &PactFieldPath, name: &str, schema: &'a Schema, config: &Value) -> Built {
-        let base = path.append(name);
+        let base = path.field(name);
         match &config.kind {
-            None | Some(ProtoKind::NullValue(_)) => Ok(Node::Array {
-                path: path.clone(),
-                items: vec![],
-            }),
+            None | Some(ProtoKind::NullValue(_)) => Err(one(null_not_allowed(name))),
             Some(ProtoKind::ListValue(list)) => {
                 let items =
                     list.values.iter().enumerate().map(|(index, item)| {
@@ -297,20 +330,17 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
         item: &Value,
     ) -> Built {
         if self.element_kind(schema) == Kind::Record {
-            self.value(&base.append(index), name, schema, item, false)
+            self.value(&base.index(index), name, schema, item, false)
         } else {
             self.value(root, name, schema, item, true)
-                .map(|node| node.with_path(base.append(index)))
+                .map(|node| node.with_path(base.index(index)))
         }
     }
 
     fn map(&self, path: &PactFieldPath, name: &str, schema: &'a Schema, config: &Value) -> Built {
-        let base = path.append(name);
+        let base = path.field(name);
         match &config.kind {
-            None | Some(ProtoKind::NullValue(_)) => Ok(Node::Map {
-                path: base,
-                entries: BTreeMap::new(),
-            }),
+            None | Some(ProtoKind::NullValue(_)) => Err(one(null_not_allowed(name))),
             Some(ProtoKind::StructValue(inner)) => {
                 let entries = inner.fields.iter().map(|(key, item)| {
                     self.value(&base, key, schema, item, true)
@@ -334,13 +364,95 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
         field: &'a RecordField,
         schema: &'a Schema,
     ) -> Built {
-        let leaf_path = path.append(&field.name);
         match &field.default {
-            None | Some(Json::Null) => Ok(Node::null_leaf(leaf_path)),
-            Some(default) => self
-                .default_leaf(leaf_path, &field.name, schema, default)
-                .map_err(one),
+            None => Ok(Node::null_leaf(path.field(&field.name))),
+            Some(default) => {
+                self.default_node(path.field(&field.name), &field.name, schema, default)
+            }
         }
+    }
+
+    fn default_node(
+        &self,
+        path: PactFieldPath,
+        name: &str,
+        schema: &'a Schema,
+        default: &Json,
+    ) -> Built {
+        let schema = self.ctx.resolve(schema);
+        match (schema, default) {
+            (_, Json::Null) => Ok(Node::null_leaf(path)),
+            (Schema::Union(_), _) => self
+                .nullable_branch(schema)
+                .ok_or_else(|| one(unsupported_default(Kind::Union, name, default)))
+                .and_then(|branch| self.default_node(path, name, branch, default)),
+            (Schema::Record(record), Json::Object(entries)) => {
+                self.record_default(path, record, entries)
+            }
+            (Schema::Array(array), Json::Array(items)) => {
+                self.array_default(path, name, &array.items, items)
+            }
+            (Schema::Map(map), Json::Object(entries)) => {
+                self.map_default(path, &map.types, entries)
+            }
+            _ => self.default_leaf(path, name, schema, default).map_err(one),
+        }
+    }
+
+    fn record_default(
+        &self,
+        path: PactFieldPath,
+        record: &'a RecordSchema,
+        entries: &JsonMap<String, Json>,
+    ) -> Built {
+        let fields = record.fields.iter().map(|field| {
+            entries
+                .get(&field.name)
+                .or(field.default.as_ref())
+                .ok_or_else(|| missing_default(&field.name))
+                .and_then(|default| {
+                    let field_path = path.field(&field.name);
+                    self.default_node(field_path, &field.name, &field.schema, default)
+                })
+                .map(|node| (field.name.clone(), node))
+        });
+        collect_all(fields).map(|fields| Node::Record {
+            path: path.clone(),
+            fields: fields.into_iter().collect(),
+        })
+    }
+
+    fn array_default(
+        &self,
+        path: PactFieldPath,
+        name: &str,
+        items_schema: &'a Schema,
+        items: &[Json],
+    ) -> Built {
+        let nodes = items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| self.default_node(path.index(index), name, items_schema, item));
+        collect_all(nodes).map(|items| Node::Array {
+            path: path.clone(),
+            items,
+        })
+    }
+
+    fn map_default(
+        &self,
+        path: PactFieldPath,
+        values_schema: &'a Schema,
+        entries: &JsonMap<String, Json>,
+    ) -> Built {
+        let nodes = entries.iter().map(|(key, item)| {
+            self.default_node(path.field(key), key, values_schema, item)
+                .map(|node| (key.clone(), node))
+        });
+        collect_all(nodes).map(|entries| Node::Map {
+            path: path.clone(),
+            entries: entries.into_iter().collect(),
+        })
     }
 
     fn default_leaf(
@@ -352,16 +464,14 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
     ) -> Result<Node, PluginError> {
         let kind = self.ctx.kind_of(schema);
         let scalar = match (kind, default) {
+            (Kind::Bytes | Kind::Fixed, Json::String(text)) => {
+                code_point_bytes(name, text).map(Scalar::Bytes)
+            }
             (_, Json::String(text)) => scalar_from_text(kind, name, text),
             (Kind::Boolean, Json::Bool(flag)) => Ok(Scalar::Boolean(*flag)),
-            (_, Json::Number(number)) => numeric_default(kind, number).ok_or_else(|| {
-                PluginError::field_unsupported_type(kind.name(), name, &default.to_string())
-            }),
-            (other, value) => Err(PluginError::field_unsupported_type(
-                other.name(),
-                name,
-                &value.to_string(),
-            )),
+            (_, Json::Number(number)) => numeric_default(kind, number)
+                .ok_or_else(|| unsupported_default(kind, name, default)),
+            (other, value) => Err(unsupported_default(other, name, value)),
         }?;
         Ok(Node::Leaf {
             path,
@@ -369,6 +479,16 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
             rules: vec![],
         })
     }
+}
+
+fn unsupported_default(kind: Kind, name: &str, default: &Json) -> PluginError {
+    PluginError::field_unsupported_type(kind.name(), name, &default.to_string())
+}
+
+fn missing_default(name: &str) -> Errors {
+    one(PluginError::Exception(format!(
+        "Couldn't find default for field: {name}"
+    )))
 }
 
 #[cfg(test)]
@@ -607,6 +727,136 @@ mod tests {
         assert_eq!(
             errors[0].to_string(),
             "NumberValue kind value for field is not supported"
+        );
+    }
+    fn field_node(node: Node, name: &str) -> Node {
+        let Node::Record { mut fields, .. } = node else {
+            panic!("record expected")
+        };
+        fields.remove(name).expect("field present")
+    }
+
+    fn leaf_scalar(node: &Node) -> Scalar {
+        match node {
+            Node::Leaf { value, .. } => value.clone(),
+            other => panic!("leaf expected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn boolean_accepts_true_and_false_in_any_case() {
+        for (text, expected) in [("TRUE", true), ("false", false), ("True", true)] {
+            let expression = format!("notEmpty('{text}')");
+            let (scalar, _) = scalar_case(r#"{"name":"f","type":"boolean"}"#, &expression);
+            assert_eq!(scalar, Scalar::Boolean(expected), "{text}");
+        }
+    }
+
+    #[test]
+    fn boolean_rejects_other_text() {
+        let schema = schema_with_field(r#"{"name":"f","type":"boolean"}"#);
+        let errors = build(&schema, json!({"f": "matching(type, 'abc')"})).unwrap_err();
+        assert_eq!(
+            errors[0].to_string(),
+            "Invalid boolean value 'abc' for field 'f'"
+        );
+    }
+
+    #[test]
+    fn explicit_null_for_a_nullable_collection_stays_null() {
+        for field in [
+            r#"{"name":"f","type":["null",{"type":"array","items":"string"}],"default":null}"#,
+            r#"{"name":"f","type":["null",{"type":"map","values":"string"}],"default":null}"#,
+        ] {
+            let schema = schema_with_field(field);
+            let node = field_node(build(&schema, json!({"f": null})).unwrap(), "f");
+            assert_eq!(leaf_scalar(&node), Scalar::Null, "{field}");
+        }
+    }
+
+    #[test]
+    fn explicit_null_for_a_non_nullable_collection_is_rejected() {
+        for field in [
+            r#"{"name":"f","type":{"type":"array","items":"string"}}"#,
+            r#"{"name":"f","type":{"type":"map","values":"string"}}"#,
+        ] {
+            let schema = schema_with_field(field);
+            let errors = build(&schema, json!({"f": null})).unwrap_err();
+            assert_eq!(
+                errors[0].to_string(),
+                "Null value is not allowed for non-nullable field 'f'",
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn map_keys_with_dots_are_bracket_quoted_in_rule_paths() {
+        let schema = schema_with_field(r#"{"name":"ages","type":{"type":"map","values":"int"}}"#);
+        let node = build(&schema, json!({"ages": {"a.b": "matching(integer, 2)"}})).unwrap();
+        assert_eq!(
+            node.rules_by_path().keys().collect::<Vec<_>>(),
+            ["$.ages['a.b']"]
+        );
+    }
+
+    #[test]
+    fn array_default_becomes_indexed_leaves() {
+        let schema = schema_with_field(
+            r#"{"name":"f","type":{"type":"array","items":"int"},"default":[1,2]}"#,
+        );
+        let Node::Array { items, .. } = field_node(build(&schema, json!({})).unwrap(), "f") else {
+            panic!("array expected")
+        };
+        let values: Vec<Scalar> = items.iter().map(leaf_scalar).collect();
+        assert_eq!(values, [Scalar::Int(1), Scalar::Int(2)]);
+    }
+
+    #[test]
+    fn map_default_becomes_keyed_leaves() {
+        let schema = schema_with_field(
+            r#"{"name":"f","type":{"type":"map","values":"string"},"default":{"k":"v"}}"#,
+        );
+        let Node::Map { entries, .. } = field_node(build(&schema, json!({})).unwrap(), "f") else {
+            panic!("map expected")
+        };
+        assert_eq!(leaf_scalar(&entries["k"]), Scalar::Text("v".into()));
+    }
+
+    #[test]
+    fn record_default_fills_missing_members_from_their_own_defaults() {
+        let schema = schema_with_field(
+            r#"{"name":"f","type":{"type":"record","name":"R","fields":[
+                 {"name":"a","type":"int"},{"name":"b","type":"string","default":"x"}]},
+               "default":{"a":7}}"#,
+        );
+        let Node::Record { fields, .. } = field_node(build(&schema, json!({})).unwrap(), "f")
+        else {
+            panic!("record expected")
+        };
+        assert_eq!(leaf_scalar(&fields["a"]), Scalar::Int(7));
+        assert_eq!(leaf_scalar(&fields["b"]), Scalar::Text("x".into()));
+    }
+
+    #[test]
+    fn bytes_and_fixed_defaults_map_code_points_to_bytes() {
+        for field in [
+            r#"{"name":"f","type":"bytes","default":"\u00ff\u0001"}"#,
+            r#"{"name":"f","type":{"type":"fixed","name":"F","size":2},"default":"\u00ff\u0001"}"#,
+        ] {
+            let schema = schema_with_field(field);
+            let leaf = only_leaf(build(&schema, json!({})).unwrap(), "f");
+            assert_eq!(leaf, (Scalar::Bytes(vec![0xff, 0x01]), vec![]), "{field}");
+        }
+    }
+
+    #[test]
+    fn bytes_default_above_u00ff_is_rejected() {
+        let schema = schema_with_field(r#"{"name":"f","type":"bytes","default":"\u0100"}"#);
+        let errors = build(&schema, json!({})).unwrap_err();
+        assert_eq!(
+            errors[0].to_string(),
+            "Invalid bytes default for field 'f': U+0100 is above U+00FF"
         );
     }
 }
