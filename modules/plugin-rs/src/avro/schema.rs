@@ -1,5 +1,6 @@
 use crate::error::PluginError;
 use apache_avro::schema::{ResolvedSchema, Schema};
+use serde_json::Value;
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,10 +75,32 @@ fn absolute(path: &Path) -> String {
         .to_string()
 }
 
+fn strip_logical_types(value: Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .filter(|(key, _)| key != "logicalType")
+                .map(|(key, inner)| (key, strip_logical_types(inner)))
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.into_iter().map(strip_logical_types).collect()),
+        other => other,
+    }
+}
+
+fn parse_base_types(text: &str) -> Result<Schema, String> {
+    serde_json::from_str::<Value>(text)
+        .map_err(|error| error.to_string())
+        .and_then(|json| {
+            Schema::parse_str(&strip_logical_types(json).to_string())
+                .map_err(|error| error.to_string())
+        })
+}
+
 pub fn parse_file(path: &Path) -> Result<Schema, PluginError> {
     std::fs::read_to_string(path)
         .ok()
-        .and_then(|text| Schema::parse_str(&text).ok())
+        .and_then(|text| parse_base_types(&text).ok())
         .ok_or_else(|| {
             let text = format!("Failed to parse avro schema from file: {}", absolute(path));
             tracing::error!("{text}");
@@ -86,7 +109,7 @@ pub fn parse_file(path: &Path) -> Result<Schema, PluginError> {
 }
 
 pub fn parse_str(text: &str) -> Result<Schema, PluginError> {
-    Schema::parse_str(text).map_err(|error| {
+    parse_base_types(text).map_err(|error| {
         tracing::error!("Failed to parse avro schema from string: {error}");
         message("Failed to parse avro schema from string".to_string())
     })
@@ -239,8 +262,36 @@ mod tests {
     }
 
     #[test]
-    fn logical_types_are_unsupported() {
+    fn date_over_int_is_an_int() {
         let schema = parsed(r#"{"type":"int","logicalType":"date"}"#);
-        assert_eq!(kind(&schema), Kind::Unsupported);
+        assert_eq!(kind(&schema), Kind::Int);
+    }
+
+    #[test]
+    fn uuid_logical_type_over_string_is_a_string_like_the_scala_plugin() {
+        let schema = parsed(r#"{"type":"string","logicalType":"uuid"}"#);
+        assert_eq!(kind(&schema), Kind::String);
+    }
+
+    #[test]
+    fn timestamp_micros_over_long_is_a_long() {
+        let schema = parsed(r#"{"type":"long","logicalType":"timestamp-micros"}"#);
+        assert_eq!(kind(&schema), Kind::Long);
+    }
+
+    #[test]
+    fn decimal_over_bytes_is_bytes() {
+        let schema = parsed(r#"{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}"#);
+        assert_eq!(kind(&schema), Kind::Bytes);
+    }
+
+    #[test]
+    fn invalid_json_with_a_logical_type_still_reports_the_fixed_message() {
+        assert_eq!(
+            parse_str(r#"{"type":"string","logicalType":"uuid""#)
+                .unwrap_err()
+                .to_string(),
+            "Failed to parse avro schema from string"
+        );
     }
 }
