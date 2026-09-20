@@ -1,0 +1,111 @@
+[
+  {
+    "namespace": "com.github.austek.example",
+    "type": "record",
+    "name": "Item",
+    "fields": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "long"
+      }
+    ]
+  },
+  {
+    "namespace": "com.github.austek.example",
+    "type": "record",
+    "name": "Complex",
+    "fields": [
+      {
+        "name": "id",
+        "type": "long"
+      },
+      {
+        "name": "names",
+        "type": {
+          "type": "array",
+          "items": "string"
+        }
+      },
+      {
+        "name": "street",
+        "type": "string",
+        "default": "NONE"
+      },
+      {
+        "name": "enabled",
+        "type": "boolean"
+      },
+      {
+        "name": "no",
+        "type": "int"
+      },
+      {
+        "name": "zipcode",
+        "type": [
+          "bytes",
+          "null"
+        ]
+      },
+      {
+        "name": "height",
+        "type": "float"
+      },
+      {
+        "name": "width",
+        "type": "double"
+      },
+      {
+        "name": "color",
+        "type": {
+          "type": "enum",
+          "name": "Color",
+          "symbols": [
+            "UNKNOWN",
+            "GREEN",
+            "RED"
+          ]
+        }
+      },
+      {
+        "name": "address",
+        "type": {
+          "type": "record",
+          "name": "MailAddress",
+          "fields": [
+            {
+              "name": "street",
+              "type": "string",
+              "default": "NONE"
+            }
+          ]
+        }
+      },
+      {
+        "name": "items",
+        "type": {
+          "type": "array",
+          "items": "com.github.austek.example.Item"
+        }
+      },
+      {
+        "name": "md5",
+        "type": {
+          "name": "MD5",
+          "type": "fixed",
+          "size": 4
+        }
+      },
+      {
+        "name": "ages",
+        "type": {
+          "type": "map",
+          "values": "int"
+        }
+      }
+    ]
+  }
+]
