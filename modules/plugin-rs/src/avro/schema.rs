@@ -97,15 +97,23 @@ fn parse_base_types(text: &str) -> Result<Schema, String> {
         })
 }
 
-pub fn parse_file(path: &Path) -> Result<Schema, PluginError> {
+fn read_and_parse(path: &Path) -> Result<Schema, String> {
     std::fs::read_to_string(path)
-        .ok()
-        .and_then(|text| parse_base_types(&text).ok())
-        .ok_or_else(|| {
-            let text = format!("Failed to parse avro schema from file: {}", absolute(path));
-            tracing::error!("{text}");
-            message(text)
-        })
+        .map_err(|error| error.to_string())
+        .and_then(|text| parse_base_types(&text))
+}
+
+pub fn parse_file(path: &Path) -> Result<Schema, PluginError> {
+    read_and_parse(path).map_err(|error| {
+        tracing::error!(
+            "Failed to read or parse avro schema file {}: {error}",
+            absolute(path)
+        );
+        message(format!(
+            "Failed to parse avro schema from file: {}",
+            absolute(path)
+        ))
+    })
 }
 
 pub fn parse_str(text: &str) -> Result<Schema, PluginError> {
