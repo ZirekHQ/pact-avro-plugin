@@ -6,7 +6,7 @@ use pact_matching::matchingrules::{
     compare_lists_with_matchingrule, compare_maps_with_matchingrule, match_values,
 };
 use pact_matching::{CommonMismatch, MatchingContext, Mismatch as CoreMismatch};
-use pact_models::matchingrules::RuleList;
+use pact_models::matchingrules::{MatchingRule, RuleList};
 use pact_models::path_exp::DocPath;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
@@ -148,6 +148,30 @@ fn list_level(path: &DocPath, mismatches: &[CommonMismatch]) -> Vec<BodyItem> {
     }
 }
 
+fn numeric_rules(rules: &RuleList) -> Option<RuleList> {
+    let kept: Vec<MatchingRule> = rules
+        .rules
+        .iter()
+        .filter(|rule| **rule != MatchingRule::NotEmpty)
+        .cloned()
+        .collect();
+    if kept.is_empty() && !rules.rules.is_empty() {
+        None
+    } else {
+        Some(RuleList {
+            rules: kept,
+            ..rules.clone()
+        })
+    }
+}
+
+fn numeric(
+    rules: &RuleList,
+    run: impl FnOnce(&RuleList) -> Result<(), Vec<String>>,
+) -> Result<(), Vec<String>> {
+    numeric_rules(rules).map_or(Ok(()), |kept| run(&kept))
+}
+
 fn match_scalar(
     path: &DocPath,
     rules: &RuleList,
@@ -158,13 +182,17 @@ fn match_scalar(
         (Value::String(e) | Value::Enum(_, e), Value::String(a) | Value::Enum(_, a)) => {
             match_values(path, rules, e.clone(), a.clone())
         }
-        (Value::Int(e), Value::Int(a)) => match_values(path, rules, *e, *a),
-        (Value::Long(e), Value::Long(a)) => match_values(path, rules, *e, *a),
-        (Value::Float(e), Value::Float(a)) => {
-            match_values(path, rules, f64::from(*e), f64::from(*a))
+        (Value::Int(e), Value::Int(a)) => numeric(rules, |kept| match_values(path, kept, *e, *a)),
+        (Value::Long(e), Value::Long(a)) => numeric(rules, |kept| match_values(path, kept, *e, *a)),
+        (Value::Float(e), Value::Float(a)) => numeric(rules, |kept| {
+            match_values(path, kept, f64::from(*e), f64::from(*a))
+        }),
+        (Value::Double(e), Value::Double(a)) => {
+            numeric(rules, |kept| match_values(path, kept, *e, *a))
         }
-        (Value::Double(e), Value::Double(a)) => match_values(path, rules, *e, *a),
-        (Value::Boolean(e), Value::Boolean(a)) => match_values(path, rules, *e, *a),
+        (Value::Boolean(e), Value::Boolean(a)) => {
+            numeric(rules, |kept| match_values(path, kept, *e, *a))
+        }
         (Value::Bytes(e) | Value::Fixed(_, e), Value::Bytes(a) | Value::Fixed(_, a)) => {
             match_values(path, rules, Bytes::from(e.clone()), Bytes::from(a.clone()))
         }
@@ -633,6 +661,18 @@ mod tests {
                 mismatches: vec![]
             }]
         );
+    }
+
+    #[test]
+    fn not_empty_accepts_any_numeric_value() {
+        let schema = schema_with_field(r#"{"name":"id","type":"long"}"#);
+        let ctx = context(
+            vec![("$.id", MatchingRule::NotEmpty)],
+            DiffConfig::NoUnexpectedKeys,
+        );
+        let expected = record(vec![("id", Value::Long(100))]);
+        let actual = record(vec![("id", Value::Long(7))]);
+        assert!(failing(&run(&schema, &ctx, &expected, &actual)).is_empty());
     }
 
     #[test]
