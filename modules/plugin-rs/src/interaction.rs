@@ -19,9 +19,17 @@ fn single(error: PluginError) -> Vec<PluginError> {
     vec![error]
 }
 
+fn texts(error: PluginError) -> Vec<String> {
+    match error {
+        PluginError::Messages(inner) => inner,
+        other => vec![other.to_string()],
+    }
+}
+
 fn collapse(errors: Vec<PluginError>) -> PluginError {
-    errors.iter().for_each(|error| tracing::error!("{error}"));
-    PluginError::Messages(errors.iter().map(ToString::to_string).collect())
+    let all: Vec<String> = errors.into_iter().flat_map(texts).collect();
+    all.iter().for_each(|text| tracing::error!("{text}"));
+    PluginError::Messages(all)
 }
 
 fn struct_of(entries: Vec<(&str, Value)>) -> Struct {
@@ -190,5 +198,32 @@ mod tests {
     fn configuration_errors_collapse_too() {
         let error = build(&config(json!({})), &item_schema(), "Item").unwrap_err();
         assert!(matches!(error, PluginError::Messages(messages) if messages.len() == 2));
+    }
+
+    #[test]
+    fn nested_messages_are_flattened_into_the_collapsed_payload() {
+        let nested = vec![
+            PluginError::Messages(vec!["a".into()]),
+            PluginError::Message("b".into()),
+        ];
+        let PluginError::Messages(texts) = collapse(nested) else {
+            panic!("messages expected")
+        };
+        assert_eq!(texts, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn reference_rules_surface_their_unsupported_text_in_the_payload() {
+        let error = build(
+            &config(json!({"name": "matching($'x')", "id": "notEmpty('1')"})),
+            &item_schema(),
+            "Item",
+        )
+        .unwrap_err();
+        let PluginError::Messages(texts) = error else {
+            panic!("messages expected")
+        };
+        assert_eq!(texts.len(), 1);
+        assert!(texts[0].contains("not supported for now"), "{texts:?}");
     }
 }
