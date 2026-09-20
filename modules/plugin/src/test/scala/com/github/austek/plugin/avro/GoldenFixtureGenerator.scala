@@ -76,8 +76,13 @@ object GoldenFixtureGenerator {
       s""""contentType":${q(body.contentType)},"bodyHex":${q(hex)},"rules":${rulesJson(response)}}"""
   }
 
+  /** Writes one golden JSON file per fixture into `args(0)`, which must be an absolute directory (the forked JVM's cwd is `modules/plugin`).
+    *
+    * {{{sbt "plugin/Test/runMain com.github.austek.plugin.avro.GoldenFixtureGenerator <absolute-dir>"}}}
+    */
   def main(args: Array[String]): Unit = {
     val outDir = Paths.get(args(0))
+    require(outDir.isAbsolute, s"Output directory must be absolute (cwd is modules/plugin), got: $outDir")
     Files.createDirectories(outDir)
     fixtures.foreach { fixture =>
       val schemaPath = Paths.get("src/test/resources", fixture.schemaFile).toAbsolutePath.toString
