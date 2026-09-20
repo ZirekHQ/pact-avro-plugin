@@ -22,24 +22,25 @@ ThisBuild / githubWorkflowBuild := Seq(
       """echo "git_tag=$(git describe --tags)" >> $GITHUB_OUTPUT"""
     )
   ),
+  // Pinned to full SHAs (Sonar githubactions:S7637): setup-protoc = v3.0.0.
   WorkflowStep.Use(
-    UseRef.Public("arduino", "setup-protoc", "v3"),
+    UseRef.Public("arduino", "setup-protoc", "c65c819552d16ad3c9b72d9dfd5ba5237b9c906b"),
     name = Some("Setup protoc"),
     params = Map("repo-token" -> "${{ secrets.GITHUB_TOKEN }}")
   ),
   WorkflowStep.Use(
-    UseRef.Public("dtolnay", "rust-toolchain", "stable"),
+    UseRef.Public("dtolnay", "rust-toolchain", "6bed0761d98439e5a578e2877258200ad565ba87"),
     name = Some("Setup Rust toolchain"),
-    params = Map("components" -> "clippy, rustfmt")
+    params = Map("toolchain" -> "stable", "components" -> "clippy, rustfmt")
   ),
   WorkflowStep.Run(
     name = Some("Build and test Rust plugin"),
     commands = List(
       "cd modules/plugin-rs",
       "cargo fmt --check",
-      "cargo build --verbose",
-      "cargo test --verbose",
-      "cargo clippy --all-targets -- -D warnings"
+      "cargo build --locked --verbose",
+      "cargo test --locked --verbose",
+      "cargo clippy --locked --all-targets -- -D warnings"
     )
   ),
   // Service containers only run on Linux GitHub-hosted runners, so the pact-broker
