@@ -14,7 +14,7 @@ body:
     attributes:
       label: Plugin version
       description: The version of pact-avro-plugin you are running.
-      placeholder: "0.0.6"
+      placeholder: "0.1.0"
     validations:
       required: true
 
@@ -28,13 +28,19 @@ body:
       required: true
 
   - type: input
+    id: operating-system
+    attributes:
+      label: Operating system and architecture
+      description: For example Linux x86_64, macOS arm64 or Windows x86_64.
+    validations:
+      required: true
+
+  - type: input
     id: java-version
     attributes:
       label: Java version
-      description: Output of `java -version`. The plugin requires Java 17 or later.
+      description: Output of `java -version`, if your Pact library runs on the JVM. The plugin itself needs no JVM.
       placeholder: "temurin-21.0.3"
-    validations:
-      required: true
 
   - type: dropdown
     id: side

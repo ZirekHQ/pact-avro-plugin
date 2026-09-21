@@ -69,7 +69,7 @@ cargo test --locked
 
 Golden and schema fixtures under `modules/plugin-rs/tests/fixtures` change only in a commit whose message states why the behavior changed.
 
-.Consumer tests
+.Consumer tests (example Scala app)
 [source,shell]
 ----
 sbt consumer/test
@@ -87,7 +87,7 @@ docker compose -f docker-compose.yml up -d
 ./scripts/pact-publish.sh
 ----
 
-.Provider tests
+.Provider tests (example Scala app)
 [source,shell]
 ----
 sbt provider/test
