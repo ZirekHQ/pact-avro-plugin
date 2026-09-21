@@ -42,21 +42,32 @@ Please provide the following information with your issue to enable us to respond
 We follow the https://github.com/bcoe/conventional-changelog-standard/blob/master/convention.md[Conventional Changelog]
 message conventions. Please ensure you follow the guidelines.
 
+Rust changes use `feat(rust):` / `fix(rust):`. Breaking changes append `!`.
+
 === Building the plugin
 
-To build the plugin, you need a working JVM environment (version 11+).
+The plugin is written in Rust. Building it needs `protoc` and the toolchain pinned in `modules/plugin-rs/rust-toolchain.toml`.
 
-The build tool used is `SBT` and you can build the plugin by running `sbt universal:stage`. This will compile the plugin and
-put the generated files in `modules/plugin/target/stage`. The contents of this directory
-and this will need to be copied into the Pact plugin directory. See the installation instructions on {doc-url}.
+[source,shell]
+----
+cd modules/plugin-rs
+cargo build --release
+cd ../..
+bash scripts/pluginLocalInstall.sh
+----
+
+`scripts/pluginLocalInstall.sh` copies the binary and the plugin manifest into the Pact plugin directory. See the installation instructions on {doc-url}.
 
 === Running the tests
 
 .Unit tests
 [source,shell]
 ----
-sbt plugin/test
+cd modules/plugin-rs
+cargo test --locked
 ----
+
+Golden and schema fixtures under `modules/plugin-rs/tests/fixtures` change only in a commit whose message states why the behavior changed.
 
 .Consumer tests
 [source,shell]
@@ -88,5 +99,10 @@ sbt provider/test
 docker compose -f docker-compose.yml down
 ----
 
+=== Releasing
+
+Releases are cut by running the "Prepare release" workflow. It computes the next version from Conventional Commit subjects since the last tag and opens a `chore: bump version -> X.Y.Z` pull request.
+Merging that pull request tags the merge commit and publishes the release.
+If a release run fails after the tag is pushed, re-run the failed workflow run: tagging is idempotent, and a version whose release already exists is refused.
 
 include::docs/README.adoc[]

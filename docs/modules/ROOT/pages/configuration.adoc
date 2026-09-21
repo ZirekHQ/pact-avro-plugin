@@ -89,6 +89,6 @@ Type '<type>' is not supported for field: '<field>' with value: '<value>'
 |`PACT_PLUGIN_DIR`
 |Overrides the plugin install directory. Defaults to `$HOME/.pact/plugins`. See xref:getting_started.adoc[].
 
-|`LOG_LEVEL`
-|Sets the plugin's log level. Defaults to `ERROR`. See xref:logging.adoc[].
+|`RUST_LOG`
+|Sets the plugin's log filter. Defaults to `info`. See xref:logging.adoc[].
 |===
