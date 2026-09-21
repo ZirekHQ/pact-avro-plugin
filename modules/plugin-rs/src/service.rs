@@ -1,8 +1,88 @@
-use crate::constants::CONTENT_TYPES_STR;
+use crate::avro::schema::{parse_file, parse_str};
+use crate::constants::{AVRO_SCHEMA, CONTENT_TYPES_STR, RECORD_NAME, SCHEMA_KEY};
+use crate::error::PluginError;
 use crate::pact_plugin::pact_plugin_server::PactPlugin;
 use crate::pact_plugin::*;
-use std::collections::HashMap;
+use prost_types::{value::Kind, Struct, Value};
+use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
 use tonic::{Request, Response, Status};
+
+fn message(text: impl Into<String>) -> PluginError {
+    PluginError::Message(text.into())
+}
+
+fn config_string(
+    fields: &BTreeMap<String, Value>,
+    key: &str,
+    error: &str,
+) -> Result<String, PluginError> {
+    match fields.get(key).and_then(|value| value.kind.as_ref()) {
+        Some(Kind::StringValue(text)) if !text.trim().is_empty() => Ok(text.clone()),
+        _ => Err(message(error)),
+    }
+}
+
+fn required<'s>(value: &'s Option<Struct>, error: &str) -> Result<&'s Struct, PluginError> {
+    value.as_ref().ok_or_else(|| message(error))
+}
+
+fn configure(
+    request: &ConfigureInteractionRequest,
+) -> Result<ConfigureInteractionResponse, PluginError> {
+    let config = required(&request.contents_config, "Configuration not found")?;
+    let path = config_string(
+        &config.fields,
+        "pact:avro",
+        "Config item with key 'pact:avro' and path to the avro schema file is required",
+    )?;
+    let schema = parse_file(Path::new(&path))?;
+    let record_name_key = format!("pact:{RECORD_NAME}");
+    let record_name = config_string(
+        &config.fields,
+        &record_name_key,
+        &format!(
+            "Config item with key '{record_name_key}' and {RECORD_NAME} of the payload is required"
+        ),
+    )?;
+    crate::interaction::build(config, &schema, &record_name)
+}
+
+fn schema_text(request: &CompareContentsRequest) -> Result<String, PluginError> {
+    let configuration = request.plugin_configuration.clone().unwrap_or_default();
+    let interaction = required(
+        &configuration.interaction_configuration,
+        "Interaction configuration not found",
+    )?;
+    let key = config_string(
+        &interaction.fields,
+        SCHEMA_KEY,
+        &format!("Plugin configuration item with key '{SCHEMA_KEY}' is required"),
+    )?;
+    let pact = required(
+        &configuration.pact_configuration,
+        "Pact configuration not found",
+    )?;
+    let entry = pact.fields.get(&key).and_then(|value| match &value.kind {
+        Some(Kind::StructValue(inner)) => Some(inner),
+        _ => None,
+    });
+    let inner = entry.ok_or_else(|| {
+        message(format!(
+            "Plugin Avro Schema configuration item with key '{key}' is required"
+        ))
+    })?;
+    config_string(
+        &inner.fields,
+        AVRO_SCHEMA,
+        &format!("Avro Schema configuration item with key '{AVRO_SCHEMA}' is required"),
+    )
+}
+
+fn compare(request: &CompareContentsRequest) -> Result<CompareContentsResponse, PluginError> {
+    let schema = parse_str(&schema_text(request)?)?;
+    crate::compare::build(request, &schema)
+}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PactAvroPluginService;
@@ -35,22 +115,35 @@ impl PactPlugin for PactAvroPluginService {
 
     async fn configure_interaction(
         &self,
-        _request: Request<ConfigureInteractionRequest>,
+        request: Request<ConfigureInteractionRequest>,
     ) -> Result<Response<ConfigureInteractionResponse>, Status> {
-        // TODO(Plan 2): port InteractionResponseBuilder/InteractionBuilder.
-        Err(Status::unimplemented(
-            "ConfigureInteraction not yet ported to Rust — see Plan 2",
-        ))
+        let request = request.into_inner();
+        tracing::info!(
+            "Configure interaction request for content type '{}'",
+            request.content_type
+        );
+        let response = configure(&request).unwrap_or_else(|error| {
+            tracing::error!("Configure interaction failed: {error}");
+            ConfigureInteractionResponse {
+                error: error.to_string(),
+                ..Default::default()
+            }
+        });
+        Ok(Response::new(response))
     }
 
     async fn compare_contents(
         &self,
-        _request: Request<CompareContentsRequest>,
+        request: Request<CompareContentsRequest>,
     ) -> Result<Response<CompareContentsResponse>, Status> {
-        // TODO(Plan 2): port CompareContentsResponseBuilder/AvroContentMatcher.
-        Err(Status::unimplemented(
-            "CompareContents not yet ported to Rust — see Plan 2",
-        ))
+        let response = compare(&request.into_inner()).unwrap_or_else(|error| {
+            tracing::error!("Compare contents failed: {error}");
+            CompareContentsResponse {
+                error: error.to_string(),
+                ..Default::default()
+            }
+        });
+        Ok(Response::new(response))
     }
 
     async fn generate_content(
@@ -150,19 +243,6 @@ mod tests {
             }))
             .await
             .expect_err("GenerateContent must return an error");
-        assert_eq!(err.code(), tonic::Code::Unimplemented);
-    }
-
-    #[tokio::test]
-    async fn configure_interaction_is_pending_plan_2() {
-        let service = PactAvroPluginService;
-        let err = service
-            .configure_interaction(Request::new(ConfigureInteractionRequest {
-                content_type: "avro/binary;record=Test".to_string(),
-                contents_config: None,
-            }))
-            .await
-            .expect_err("ConfigureInteraction must return an error until Plan 2 lands");
         assert_eq!(err.code(), tonic::Code::Unimplemented);
     }
 }

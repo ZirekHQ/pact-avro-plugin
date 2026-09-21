@@ -1,0 +1,15 @@
+{
+  "namespace": "com.example",
+  "type": "invalid",
+  "name": "Item",
+  "fields": [
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "id",
+      "type": "long"
+    }
+  ]
+}
