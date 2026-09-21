@@ -118,3 +118,5 @@ ThisBuild / githubWorkflowBuild := Seq(
 ThisBuild / githubWorkflowPublishTargetBranches := Seq()
 
 ThisBuild / githubWorkflowPublish := Seq()
+
+ThisBuild / githubWorkflowIncludeClean := false
