@@ -86,3 +86,5 @@ jobs:
     with:
       new_tag: ${{ inputs.new_tag }}
       dry_run: ${{ inputs.dry_run == true }}
+    secrets:
+      PACT_PLUGINS_PR_TOKEN: ${{ secrets.PACT_PLUGINS_PR_TOKEN }}

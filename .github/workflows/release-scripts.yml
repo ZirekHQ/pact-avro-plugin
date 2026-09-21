@@ -32,3 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/test-fetch-pact-plugin-cli.sh
+      - name: Index registration tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/test-index-add-version.sh

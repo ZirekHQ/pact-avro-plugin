@@ -12,6 +12,9 @@ on:
         required: false
         type: boolean
         default: false
+    secrets:
+      PACT_PLUGINS_PR_TOKEN:
+        required: false
   workflow_dispatch:
     inputs:
       dry_run:
@@ -201,3 +204,28 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.version.outputs.version }}
         run: bash scripts/smoke-install.sh "v${VERSION}"
+
+  index-pr:
+    name: Open the pact-plugins index pull request
+    needs: [version, smoke]
+    if: inputs.dry_run != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The release is already published; a failed upstream PR must not turn the run red.
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Open the pull request
+        env:
+          GH_TOKEN: ${{ secrets.PACT_PLUGINS_PR_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::PACT_PLUGINS_PR_TOKEN is not set; register v${VERSION} in pact-foundation/pact-plugins manually (bash scripts/index-pr.sh v${VERSION})"
+            exit 0
+          fi
+          bash scripts/index-pr.sh "v${VERSION}"

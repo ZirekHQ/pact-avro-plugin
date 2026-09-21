@@ -106,5 +106,7 @@ Squash- or rebase-merge that pull request: a merge commit does not match the rel
 To release a version outside the computed bump, run "Prepare release" with `new_tag` set to `vX.Y.Z`; the run needs approval in the `release` environment.
 If a release run fails after the tag is pushed, re-run the failed workflow run: tagging is idempotent, and a version whose release already exists is refused.
 If the post-publish smoke test fails, fix on `main` and cut a patch release; never delete or move a published tag or release.
+After the smoke test passes, the run opens a pull request against https://github.com/pact-foundation/pact-plugins[pact-foundation/pact-plugins] that adds the version to its plugin index; until that merges, `pact-plugin-cli install avro` does not see the release.
+The job needs the `PACT_PLUGINS_PR_TOKEN` secret and never fails the release run. Without the token, or to retry, run `GH_TOKEN=<token> bash scripts/index-pr.sh vX.Y.Z`.
 
 include::docs/README.adoc[]
