@@ -9,6 +9,10 @@ ThisBuild / githubWorkflowJavaVersions := Seq(
 ThisBuild / githubWorkflowTargetBranches := Seq("main")
 ThisBuild / githubWorkflowTargetTags := Seq()
 
+ThisBuild / githubWorkflowPermissions := Some(
+  Permissions.Specify(Map(PermissionScope.Contents -> PermissionValue.Read))
+)
+
 ThisBuild / githubWorkflowEnv := Map(
   "GITHUB_TOKEN" -> "${{ secrets.GITHUB_TOKEN }}"
 )
