@@ -89,16 +89,11 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
-        with:
-          toolchain: stable
-          components: clippy, rustfmt
-
       - name: Build and test Rust plugin
         shell: bash
         run: |
           cd modules/plugin-rs
+          rustup toolchain install
           cargo fmt --check
           cargo build --locked --verbose
           cargo test --locked --verbose

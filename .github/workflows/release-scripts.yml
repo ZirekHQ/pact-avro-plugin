@@ -1,0 +1,30 @@
+name: Release Scripts
+
+on:
+  pull_request:
+    paths: ['scripts/**', '.github/workflows/release-scripts.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/**']
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    name: shellcheck and script tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: shellcheck
+        run: find scripts -name '*.sh' ! -name pact-publish.sh -print0 | xargs -0 shellcheck scripts/release/install-plugin.sh.tmpl
+      - name: Release file tests
+        run: bash scripts/test-release-files.sh
+      - name: Install script tests
+        run: bash scripts/test-install-plugin.sh
+      - name: Versioning tests
+        run: bash scripts/test-versioning.sh

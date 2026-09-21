@@ -1,0 +1,72 @@
+#!/bin/sh
+set -eu
+
+VERSION="@VERSION@"
+BASE_URL="${PACT_AVRO_PLUGIN_BASE_URL:-https://github.com/ZirekHQ/pact-avro-plugin/releases/download/v${VERSION}}"
+PLUGIN_DIR="${PACT_PLUGIN_DIR:-$HOME/.pact/plugins}/avro-${VERSION}"
+
+fail() { echo "ERROR: $1" >&2; exit 1; }
+
+detect_os() {
+  case "$(uname -s)" in
+    Linux) echo linux ;;
+    Darwin) echo osx ;;
+    CYGWIN*|MINGW*|MSYS*) echo windows ;;
+    *) fail "$(uname -s) is not a supported operating system" ;;
+  esac
+}
+
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64) echo x86_64 ;;
+    arm64|aarch64) echo aarch64 ;;
+    *) fail "$(uname -m) is not a supported architecture" ;;
+  esac
+}
+
+download() {
+  if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"
+  elif command -v wget >/dev/null 2>&1; then wget -q "$1" -O "$2"
+  else fail "curl or wget is required"
+  fi
+}
+
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else fail "sha256sum or shasum is required to verify the download"
+  fi
+}
+
+verify_checksum() {
+  expected="$(cut -d' ' -f1 "$1.sha256")"
+  [ -n "$expected" ] || fail "empty checksum for ${1##*/}"
+  [ "$expected" = "$(sha256_of "$1")" ] || fail "checksum mismatch for ${1##*/}"
+}
+
+install_binary() {
+  asset="pact-avro-plugin-$1-$2$3.gz"
+  download "$BASE_URL/$asset" "$work/$asset"
+  download "$BASE_URL/$asset.sha256" "$work/$asset.sha256"
+  verify_checksum "$work/$asset"
+  gunzip -c "$work/$asset" > "$PLUGIN_DIR/pact-avro-plugin$3"
+  chmod +x "$PLUGIN_DIR/pact-avro-plugin$3"
+}
+
+install_manifest() {
+  download "$BASE_URL/pact-plugin.json" "$work/pact-plugin.json"
+  mv "$work/pact-plugin.json" "$PLUGIN_DIR/pact-plugin.json"
+}
+
+os="$(detect_os)"
+arch="$(detect_arch)"
+ext=""
+[ "$os" = windows ] && ext=".exe"
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+echo "== Installing avro plugin ${VERSION} (${os}-${arch}) into ${PLUGIN_DIR} =="
+mkdir -p "$PLUGIN_DIR"
+install_binary "$os" "$arch" "$ext"
+install_manifest
