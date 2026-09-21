@@ -86,7 +86,18 @@ jobs:
           echo "sha_short=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_OUTPUT
           echo "git_tag=$(git describe --tags)" >> $GITHUB_OUTPUT
 
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            modules/plugin-rs/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('modules/plugin-rs/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
       - name: Build and test Rust plugin
+        if: matrix.java == 'zulu@17'
         shell: bash
         run: |
           cd modules/plugin-rs

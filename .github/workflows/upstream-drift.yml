@@ -43,7 +43,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          if ! tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null)"; then
+            echo "::notice::No published release yet -- skipping the smoke test"
+            echo "has_rust=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           has_rust="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | index("pact-avro-plugin-linux-x86_64.gz") != null')"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "has_rust=$has_rust" >> "$GITHUB_OUTPUT"

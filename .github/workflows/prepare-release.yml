@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
+          token: ${{ secrets.RELEASE_PR_TOKEN || secrets.GITHUB_TOKEN }}
           persist-credentials: true
           fetch-depth: 0
       - name: Setup Rust toolchain
@@ -54,7 +55,7 @@ jobs:
       - name: Open release PR
         if: steps.next.outputs.skip != 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.next.outputs.version }}
         run: |
           set -euo pipefail
