@@ -81,7 +81,7 @@ ThisBuild / githubWorkflowBuild := Seq(
       "cd modules/plugin-rs",
       "cargo build --locked --release",
       "cd ../..",
-      "bash scripts/pluginLocalInstallRs.sh"
+      "bash scripts/pluginLocalInstall.sh"
     )
   ),
   WorkflowStep.Sbt(

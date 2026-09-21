@@ -17,9 +17,6 @@ object Dependencies extends DependencyUtils {
     val slf4jApi = "2.0.18"
   }
 
-  // protobuf Dependencies
-  val scalaPB: ModuleID = "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion
-
   // Compile Dependencies
   val apacheAvro: ModuleID = "org.apache.avro"           % "avro"     % Versions.avro excludeAll ExclusionRule("org.slf4j")
   val auPactMatchers: ModuleID = "au.com.dius.pact.core" % "matchers" % Versions.pact excludeAll (
@@ -28,7 +25,6 @@ object Dependencies extends DependencyUtils {
   )
   val logback: ModuleID = "ch.qos.logback"         % "logback-classic" % Versions.logback
   val scalaLogging: ModuleID = "com.typesafe.scala-logging" %% "scala-logging"        % Versions.scalaLogging excludeAll ExclusionRule("org.slf4j")
-  val scalaPBRuntime = "com.thesamet.scalapb"               %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion
   val slf4jApi: ModuleID = "org.slf4j"                      %% "slf4j-api"            % Versions.slf4jApi
 
   // Test dependencies
@@ -41,9 +37,4 @@ object Dependencies extends DependencyUtils {
   val pulsar4sCore: ModuleID = "com.clever-cloud.pulsar4s"     %% "pulsar4s-core"     % Versions.pulsar4sVersion excludeAll ExclusionRule("org.slf4j")
   val scalacheck: ModuleID = "org.scalacheck"                  %% "scalacheck"        % Versions.scalacheck
   val scalaTest: ModuleID = "org.scalatest"                    %% "scalatest"         % Versions.scalaTest
-
-  // Overrides
-  val grpcApi: ModuleID = "io.grpc"   % "grpc-api"   % scalapb.compiler.Version.grpcJavaVersion
-  val grpcCore: ModuleID = "io.grpc"  % "grpc-core"  % scalapb.compiler.Version.grpcJavaVersion
-  val grpcNetty: ModuleID = "io.grpc" % "grpc-netty" % scalapb.compiler.Version.grpcJavaVersion
 }
