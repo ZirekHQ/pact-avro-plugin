@@ -46,9 +46,11 @@ if git ls-remote --exit-code --heads fork "$branch" >/dev/null 2>&1; then
   git fetch --quiet fork "refs/heads/${branch}:refs/remotes/fork/${branch}"
 fi
 attempts=0
-until git -c credential.helper='!gh auth git-credential' push --quiet --force-with-lease fork "$branch"; do
+# The clone is shallow, so the fork must already hold upstream's history or the push is rejected.
+until gh repo sync "${fork_owner}/pact-plugins" && \
+  git -c credential.helper='!gh auth git-credential' push --quiet --force-with-lease fork "$branch"; do
   attempts=$((attempts + 1))
-  [[ "$attempts" -lt 5 ]] || { echo "::error::could not push ${branch} to the fork" >&2; exit 1; }
+  [[ "$attempts" -lt 5 ]] || { echo "::error::could not sync the fork and push ${branch}" >&2; exit 1; }
   sleep 5
 done
 
