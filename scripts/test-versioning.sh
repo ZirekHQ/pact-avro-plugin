@@ -16,17 +16,17 @@ git commit -q --allow-empty -m "feat: initial"
 expect() {
   local want_out="$1" want_rc="$2" got rc=0
   got="$(bash "$here/next-version.sh" 2>/dev/null)" || rc=$?
-  if [ "$rc" != "$want_rc" ] || [ "$got" != "$want_out" ]; then
+  if [[ "$rc" != "$want_rc" ]] || [[ "$got" != "$want_out" ]]; then
     echo "FAIL: expected rc=$want_rc out='$want_out', got rc=$rc out='$got'" >&2
     exit 1
   fi
 }
 
 reset() { git tag -f v0.0.6 HEAD >/dev/null; }
-commit() { git commit -q --allow-empty -m "$1"${2:+ -m "$2"}; }
+commit() { local subject="$1" body="${2:-}"; git commit -q --allow-empty -m "$subject"${body:+ -m "$body"}; }
 
 rc=0; bash "$here/next-version.sh" >/dev/null 2>&1 || rc=$?
-test "$rc" = 2
+[[ "$rc" == 2 ]]
 
 reset;                          expect "" 1
 commit "docs: update readme";   expect "" 1

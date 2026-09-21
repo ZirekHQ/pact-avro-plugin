@@ -11,12 +11,12 @@ if ! [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; th
   exit 1
 fi
 
-render() { sed "s/@VERSION@/${version}/g" "$1" > "$2"; }
+render() { local src="$1" dest="$2"; sed "s/@VERSION@/${version}/g" "$src" > "$dest"; }
 
 mkdir -p "$outdir"
 render "$root/scripts/release/pact-plugin.json.tmpl" "$outdir/pact-plugin.json"
 
-if [ "$what" = all ]; then
+if [[ "$what" == all ]]; then
   render "$root/scripts/release/install-plugin.sh.tmpl" "$outdir/install-plugin.sh"
   chmod +x "$outdir/install-plugin.sh"
   (cd "$outdir" && openssl dgst -sha256 -r install-plugin.sh > install-plugin.sh.sha256)

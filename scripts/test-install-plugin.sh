@@ -23,8 +23,8 @@ run_install() {
 
 run_install
 dest="$tmp/plugins/avro-$version"
-test -x "$dest/pact-avro-plugin"
-test "$("$dest/pact-avro-plugin")" = fake-plugin
+[[ -x "$dest/pact-avro-plugin" ]]
+[[ "$("$dest/pact-avro-plugin")" == fake-plugin ]]
 grep -q "\"version\": \"$version\"" "$dest/pact-plugin.json"
 
 sha_file="$release/pact-avro-plugin-$os-$arch.gz.sha256"
@@ -37,8 +37,8 @@ assert_install_rejected() {
     exit 1
   fi
   grep -qF "$expected_message" "$tmp/stderr"
-  test ! -e "$dest/pact-avro-plugin"
-  test ! -e "$dest/pact-plugin.json"
+  [[ ! -e "$dest/pact-avro-plugin" ]]
+  [[ ! -e "$dest/pact-plugin.json" ]]
 }
 
 echo tampered > "$sha_file"
