@@ -1,0 +1,189 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      new_tag:
+        required: false
+        type: string
+      dry_run:
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build everything, publish nothing"
+        required: false
+        type: boolean
+        default: true
+
+permissions: {}
+
+jobs:
+  version:
+    name: Resolve version and tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      inputs.new_tag != '' ||
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.head_commit.message, 'chore: bump version -> ')
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Resolve version
+        id: version
+        env:
+          NEW_TAG: ${{ inputs.new_tag }}
+        run: |
+          set -euo pipefail
+          cargo_version="$(awk '/^\[package\]/{f=1;next} /^\[/{f=0} f && /^version = /{gsub(/version = "|"/,""); print; exit}' modules/plugin-rs/Cargo.toml)"
+          if [ -n "${NEW_TAG:-}" ] && [ "${NEW_TAG#v}" != "$cargo_version" ]; then
+            echo "::error::tag ${NEW_TAG} does not match Cargo.toml version ${cargo_version}" >&2
+            exit 1
+          fi
+          echo "version=${cargo_version}" >> "$GITHUB_OUTPUT"
+      - name: Guard against re-releasing
+        if: inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "::error::release v${VERSION} already exists" >&2
+            exit 1
+          fi
+      - name: Push release tag
+        if: inputs.dry_run != true
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          [ "$GITHUB_REF" = "refs/heads/main" ] || { echo "::error::release tags are only created from main" >&2; exit 1; }
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          existing="$(git ls-remote origin "refs/tags/v${VERSION}" | cut -f1)"
+          if [ -n "$existing" ] && [ "$existing" != "$GITHUB_SHA" ]; then
+            echo "::error::v${VERSION} exists on origin at ${existing}, not ${GITHUB_SHA}" >&2
+            exit 1
+          fi
+          if [ -z "$existing" ]; then
+            git tag "v${VERSION}"
+            git push origin "v${VERSION}"
+          fi
+
+  build:
+    name: Build ${{ matrix.asset }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { asset: linux-x86_64,   os: ubuntu-22.04,     target: x86_64-unknown-linux-gnu }
+          - { asset: linux-aarch64,  os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu }
+          - { asset: osx-x86_64,     os: macos-15-intel,   target: x86_64-apple-darwin }
+          - { asset: osx-aarch64,    os: macos-15,         target: aarch64-apple-darwin }
+          - { asset: windows-x86_64, os: windows-2025,     target: x86_64-pc-windows-msvc,  ext: .exe }
+          - { asset: windows-aarch64, os: windows-11-arm,  target: aarch64-pc-windows-msvc, ext: .exe }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install protoc
+        env:
+          RUNNER_OS_NAME: ${{ runner.os }}
+        run: |
+          case "$RUNNER_OS_NAME" in
+            Linux) sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev ;;
+            macOS) brew install protobuf ;;
+            Windows) choco install protoc -y --no-progress ;;
+          esac
+      - name: Setup Rust toolchain
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          rustup toolchain install
+          rustup target add "$TARGET"
+        working-directory: modules/plugin-rs
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: modules/plugin-rs
+          key: ${{ matrix.target }}
+      - name: Build
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --locked --target "$TARGET"
+        working-directory: modules/plugin-rs
+      - name: Verify binary version
+        env:
+          TARGET: ${{ matrix.target }}
+          EXT: ${{ matrix.ext }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: test "$(modules/plugin-rs/target/$TARGET/release/pact-avro-plugin$EXT --version)" = "$VERSION"
+      - name: Package
+        env:
+          TARGET: ${{ matrix.target }}
+          ASSET: ${{ matrix.asset }}
+          EXT: ${{ matrix.ext }}
+        run: |
+          mkdir dist
+          name="pact-avro-plugin-${ASSET}${EXT}.gz"
+          gzip -9 -c "modules/plugin-rs/target/$TARGET/release/pact-avro-plugin$EXT" > "dist/$name"
+          (cd dist && openssl dgst -sha256 -r "$name" > "$name.sha256")
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asset-${{ matrix.asset }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: asset-*
+          merge-multiple: true
+          path: dist
+      - name: Render manifest and install script
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: bash scripts/render-release-files.sh "$VERSION" dist all
+      - name: Check the asset set
+        run: test "$(find dist -type f | wc -l)" -eq 15
+      - name: Upload dry-run files
+        if: inputs.dry_run == true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-files
+          path: dist/*
+      - name: Create release
+        if: inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: gh release create "v${VERSION}" dist/* --repo "$GITHUB_REPOSITORY" --title "v${VERSION}" --generate-notes --verify-tag
