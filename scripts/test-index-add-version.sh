@@ -23,7 +23,10 @@ export INDEX_MANIFEST_FILE="$tmp/rendered/pact-plugin.json"
 
 sed 's/"avro"/"other"/; s/pact-avro-plugin/pact-other-plugin/' "$INDEX_MANIFEST_FILE" > "$tmp/other.json"
 "$cli" repository add-plugin-version file "$index" "$tmp/other.json" >/dev/null
-entry() { awk -v want="[entries.$2]" '/^\[entries\.[^].]+\]$/ { on = ($0 == want) } on' "$1"; }
+entry() {
+  local file="$1" name="$2"
+  awk -v want="[entries.${name}]" '/^\[entries\.[^].]+\]$/ { on = ($0 == want) } on' "$file"
+}
 other_before="$(entry "$index" other)"
 [[ -n "$other_before" ]]
 

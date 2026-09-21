@@ -42,6 +42,9 @@ fi
 
 gh repo view "${fork_owner}/pact-plugins" >/dev/null 2>&1 || gh repo fork "$upstream" --clone=false
 git remote add fork "https://github.com/${fork_owner}/pact-plugins.git"
+if git ls-remote --exit-code --heads fork "$branch" >/dev/null 2>&1; then
+  git fetch --quiet fork "refs/heads/${branch}:refs/remotes/fork/${branch}"
+fi
 attempts=0
 until git -c credential.helper='!gh auth git-credential' push --quiet --force-with-lease fork "$branch"; do
   attempts=$((attempts + 1))

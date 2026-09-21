@@ -18,14 +18,21 @@ if grep -A1 -Fx '[[entries.avro.versions]]' "$index" | grep -Fxq "version = \"${
   exit 0
 fi
 
-header() { awk -v re="$entry_header" '$0 ~ re { exit } { print }' "$1"; }
-avro_block() { awk -v re="$entry_header" '$0 ~ re { on = ($0 == "[entries.avro]") } on' "$1"; }
+header() {
+  local file="$1"
+  awk -v re="$entry_header" '$0 ~ re { exit } { print }' "$file"
+}
+avro_block() {
+  local file="$1"
+  awk -v re="$entry_header" '$0 ~ re { on = ($0 == "[entries.avro]") } on' "$file"
+}
 replace_avro() {
-  awk -v re="$entry_header" -v blk="$2" '
+  local file="$1" block="$2"
+  awk -v re="$entry_header" -v blk="$block" '
     $0 ~ re { started = 1; skip = ($0 == "[entries.avro]")
               if (skip) { while ((getline l < blk) > 0) print l; replaced = 1 } }
     started && !skip { print }
-    END { if (!replaced) while ((getline l < blk) > 0) print l }' "$1"
+    END { if (!replaced) while ((getline l < blk) > 0) print l }' "$file"
 }
 
 tmp="$(mktemp -d)"
