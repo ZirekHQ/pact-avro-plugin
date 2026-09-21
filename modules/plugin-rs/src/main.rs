@@ -4,8 +4,17 @@ use std::io::Write;
 use tokio_stream::wrappers::TcpListenerStream;
 use uuid::Uuid;
 
+fn version_requested() -> bool {
+    std::env::args().nth(1).as_deref() == Some("--version")
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if version_requested() {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(
