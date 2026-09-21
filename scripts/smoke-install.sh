@@ -7,7 +7,7 @@ repo=https://github.com/ZirekHQ/pact-avro-plugin
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-curl -fsSL https://github.com/pact-foundation/pact-plugins/releases/latest/download/pact-plugin-cli-linux-x86_64.gz \
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/pact-foundation/pact-plugins/releases/latest/download/pact-plugin-cli-linux-x86_64.gz \
   | gunzip > "$tmp/pact-plugin-cli"
 chmod +x "$tmp/pact-plugin-cli"
 
@@ -21,7 +21,7 @@ check_install() {
 PACT_PLUGIN_DIR="$tmp/cli" "$tmp/pact-plugin-cli" -y install "$repo/releases/tag/$tag"
 check_install "$tmp/cli"
 
-curl -fsSL "$repo/releases/download/$tag/install-plugin.sh" | PACT_PLUGIN_DIR="$tmp/script" sh
+curl --proto '=https' --tlsv1.2 -fsSL "$repo/releases/download/$tag/install-plugin.sh" | PACT_PLUGIN_DIR="$tmp/script" sh
 check_install "$tmp/script"
 
 first_line="$(timeout 5 "$tmp/cli/avro-$version/pact-avro-plugin" | head -1 || true)"
