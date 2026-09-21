@@ -49,8 +49,9 @@ install_binary() {
   download "$BASE_URL/$asset" "$work/$asset"
   download "$BASE_URL/$asset.sha256" "$work/$asset.sha256"
   verify_checksum "$work/$asset"
-  gunzip -c "$work/$asset" > "$PLUGIN_DIR/pact-avro-plugin$3"
-  chmod +x "$PLUGIN_DIR/pact-avro-plugin$3"
+  gunzip -c "$work/$asset" > "$work/pact-avro-plugin$3"
+  chmod +x "$work/pact-avro-plugin$3"
+  mv "$work/pact-avro-plugin$3" "$PLUGIN_DIR/pact-avro-plugin$3"
 }
 
 install_manifest() {

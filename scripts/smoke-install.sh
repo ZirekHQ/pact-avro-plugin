@@ -21,7 +21,10 @@ check_install() {
 PACT_PLUGIN_DIR="$tmp/cli" "$tmp/pact-plugin-cli" -y install "$repo/releases/tag/$tag"
 check_install "$tmp/cli"
 
-curl --proto '=https' --tlsv1.2 -fsSL "$repo/releases/download/$tag/install-plugin.sh" | PACT_PLUGIN_DIR="$tmp/script" sh
+curl --proto '=https' --tlsv1.2 -fsSL "$repo/releases/download/$tag/install-plugin.sh" -o "$tmp/install-plugin.sh"
+curl --proto '=https' --tlsv1.2 -fsSL "$repo/releases/download/$tag/install-plugin.sh.sha256" -o "$tmp/install-plugin.sh.sha256"
+(cd "$tmp" && sha256sum -c install-plugin.sh.sha256)
+PACT_PLUGIN_DIR="$tmp/script" sh "$tmp/install-plugin.sh"
 check_install "$tmp/script"
 
 first_line="$(timeout 5 "$tmp/cli/avro-$version/pact-avro-plugin" | head -1 || true)"

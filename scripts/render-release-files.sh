@@ -4,6 +4,10 @@ set -euo pipefail
 version="${1:?usage: render-release-files.sh <version> <outdir> [manifest|all]}"
 outdir="${2:?usage: render-release-files.sh <version> <outdir> [manifest|all]}"
 what="${3:-all}"
+case "$what" in
+  manifest|all) ;;
+  *) echo "::error::'${what}' is not 'manifest' or 'all'" >&2; exit 1 ;;
+esac
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if ! [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
