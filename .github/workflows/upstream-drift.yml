@@ -54,5 +54,6 @@ jobs:
       - name: Smoke test
         if: steps.latest.outputs.has_rust == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.latest.outputs.tag }}
         run: bash scripts/smoke-install.sh "$TAG"

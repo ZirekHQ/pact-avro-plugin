@@ -7,9 +7,7 @@ repo=https://github.com/ZirekHQ/pact-avro-plugin
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/pact-foundation/pact-plugins/releases/latest/download/pact-plugin-cli-linux-x86_64.gz \
-  | gunzip > "$tmp/pact-plugin-cli"
-chmod +x "$tmp/pact-plugin-cli"
+bash "$(dirname "${BASH_SOURCE[0]}")/fetch-pact-plugin-cli.sh" "$tmp"
 
 check_install() {
   local root="$1"
