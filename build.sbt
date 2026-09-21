@@ -43,8 +43,6 @@ lazy val provider = moduleProject("provider", "examples/provider")
   .enablePlugins(SbtAvro)
   .settings(
     avroVersion := Versions.avro,
-    Test / sbt.Keys.test := (Test / sbt.Keys.test).dependsOn(pluginRef / buildTestPluginDir).value,
-    Test / envVars := Map("PACT_PLUGIN_DIR" -> ((pluginRef / target).value / "plugin").absolutePath),
     testOptions ++= pactOptions,
     libraryDependencies ++=
       Dependencies.compile(Dependencies.avroCompiler, logback, pulsar4sCore, pulsar4sAvro, scalacheck) ++
@@ -57,8 +55,6 @@ lazy val consumer = moduleProject("consumer", "examples/consumer")
   .settings(
     avroVersion := Versions.avro,
     Compile / avroSource := (Compile / resourceDirectory).value / "avro",
-    Test / sbt.Keys.test := (Test / sbt.Keys.test).dependsOn(pluginRef / buildTestPluginDir).value,
-    Test / envVars := Map("PACT_PLUGIN_DIR" -> ((pluginRef / target).value / "plugin").absolutePath),
     libraryDependencies ++=
       Dependencies.compile(Dependencies.avroCompiler, logback, pulsar4sCore, pulsar4sAvro, scalaLogging) ++
         Dependencies.test(assertJCore, jUnitInterface, pactConsumerJunit),
