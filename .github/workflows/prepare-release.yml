@@ -81,7 +81,7 @@ jobs:
     needs: gate
     permissions:
       contents: write
-    uses: ./.github/workflows/release.yml
+    uses: ./.github/workflows/release.yml # zizmor: ignore[self-repository] the $/ form is untested until release.yml has run on main
     with:
       new_tag: ${{ inputs.new_tag }}
       dry_run: ${{ inputs.dry_run == true }}
