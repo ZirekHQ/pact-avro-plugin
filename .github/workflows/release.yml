@@ -192,3 +192,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.version.outputs.version }}
         run: gh release create "v${VERSION}" dist/* --repo "$GITHUB_REPOSITORY" --title "v${VERSION}" --generate-notes --verify-tag
+
+  smoke:
+    name: Smoke test the published release
+    needs: [version, publish]
+    if: inputs.dry_run != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install and verify
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: bash scripts/smoke-install.sh "v${VERSION}"

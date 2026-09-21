@@ -1,0 +1,56 @@
+name: Upstream Drift
+
+on:
+  schedule:
+    - cron: '43 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unlocked-build:
+    name: Build and test with the newest compatible dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
+      - name: Setup Rust toolchain
+        run: rustup toolchain install
+        working-directory: modules/plugin-rs
+      - name: Update dependencies
+        run: cargo update
+        working-directory: modules/plugin-rs
+      - name: Build, test, lint
+        run: |
+          cargo build --release
+          cargo test
+          cargo clippy --all-targets -- -D warnings
+        working-directory: modules/plugin-rs
+
+  latest-release-smoke:
+    name: Install the latest release with the latest pact-plugin-cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Find the latest release
+        id: latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          has_rust="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | index("pact-avro-plugin-linux-x86_64.gz") != null')"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "has_rust=$has_rust" >> "$GITHUB_OUTPUT"
+      - name: Smoke test
+        if: steps.latest.outputs.has_rust == 'true'
+        env:
+          TAG: ${{ steps.latest.outputs.tag }}
+        run: bash scripts/smoke-install.sh "$TAG"
