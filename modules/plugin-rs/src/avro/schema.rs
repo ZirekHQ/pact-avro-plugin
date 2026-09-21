@@ -276,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn uuid_logical_type_over_string_is_a_string_like_the_scala_plugin() {
+    fn uuid_logical_type_over_string_is_a_string() {
         let schema = parsed(r#"{"type":"string","logicalType":"uuid"}"#);
         assert_eq!(kind(&schema), Kind::String);
     }

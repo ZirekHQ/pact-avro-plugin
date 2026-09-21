@@ -1,7 +1,6 @@
 use thiserror::Error;
 
-/// Mirrors Scala's `PluginError[T]` sealed trait, collapsing it and the
-/// `Field*Exception` hierarchy into one enum returned via `Result`.
+/// Every failure the plugin reports, returned as a `Result` error.
 #[derive(Debug, Error)]
 pub enum PluginError {
     #[error("{0}")]

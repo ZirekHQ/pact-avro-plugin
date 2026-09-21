@@ -51,14 +51,14 @@ fn check(name: &str) {
     let interaction = &response.interaction[0];
     let body = interaction.contents.as_ref().unwrap();
     assert_eq!(body.content_type, fixture["contentType"].as_str().unwrap());
-    let scala_bytes = unhex(fixture["bodyHex"].as_str().unwrap());
+    let fixture_bytes = unhex(fixture["bodyHex"].as_str().unwrap());
     let rust_bytes = body.content.as_deref().unwrap();
-    assert_eq!(rust_bytes.len(), scala_bytes.len(), "{name}: body length");
+    assert_eq!(rust_bytes.len(), fixture_bytes.len(), "{name}: body length");
     let ctx = SchemaCtx::new(&schema).unwrap();
     let record = ctx.find_record(record_name).unwrap();
     assert_eq!(
         decode(&ctx, record, rust_bytes).unwrap(),
-        decode(&ctx, record, &scala_bytes).unwrap(),
+        decode(&ctx, record, &fixture_bytes).unwrap(),
         "{name}: decoded body"
     );
     assert_eq!(
@@ -69,12 +69,12 @@ fn check(name: &str) {
 }
 
 #[test]
-fn item_matches_the_scala_plugin() {
+fn item_matches_the_golden_fixture() {
     check("item");
 }
 
 #[test]
-fn complex_matches_the_scala_plugin() {
+fn complex_matches_the_golden_fixture() {
     check("complex");
 }
 

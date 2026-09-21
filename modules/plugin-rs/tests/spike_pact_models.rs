@@ -41,13 +41,11 @@
 //!      wrap it in a `CoreMatchingContext`, call
 //!      `context.select_best_matcher(&path)` (a `MatchingContext` trait
 //!      method) to get the `RuleList` for that path, then pass that
-//!      `RuleList` into `match_values`. This mirrors pact-jvm's
-//!      `MatchingContext` + per-path rule lookup shape reasonably closely.
+//!      `RuleList` into `match_values`.
 //!
 //! Net assessment for Plan 2: both crates work as external dependencies and
 //! cover matching-rule-DSL parsing, per-value matching, and path-expression
-//! construction — the three capabilities the Scala plugin leans on
-//! pact-jvm-core for. Nothing was found to be unusable; the deltas above are
+//! construction. Nothing was found to be unusable; the deltas above are
 //! naming/shape corrections, not missing capability.
 
 use pact_models::matchingrules::expressions::parse_matcher_def;
@@ -56,7 +54,6 @@ use pact_models::path_exp::DocPath;
 
 #[test]
 fn parses_a_type_matching_rule_expression() {
-    // Mirrors what RuleParser.scala does today via pact-jvm-core.
     let parsed = parse_matcher_def("matching(type,'Name')")
         .expect("a valid matching rule expression must parse");
 
@@ -75,7 +72,6 @@ fn rejects_an_invalid_matching_rule_expression() {
 
 #[test]
 fn builds_a_doc_path_matching_pact_expression_syntax() {
-    // Mirrors PathExpressionImplicits.constructPath (List[String] => "$.foo.bar").
     let path = DocPath::root().join("foo").join("bar");
     assert_eq!(path.to_string(), "$.foo.bar");
 }
@@ -89,8 +85,7 @@ fn equality_matching_rule_flags_a_mismatch() {
 
     // Build a per-path matching-rule category the way a real interaction's
     // body matching rules would be structured (path -> RuleList), then wrap
-    // it in a MatchingContext, exactly like pact-jvm's MatchingContext is
-    // used to look up the applicable rule for a given path before matching.
+    // it in a MatchingContext to look up the applicable rule for a path.
     let path = DocPath::root().join("name");
     let mut matchers = MatchingRuleCategory::empty(Category::BODY);
     matchers.add_rule(path.clone(), MatchingRule::Equality, RuleLogic::And);

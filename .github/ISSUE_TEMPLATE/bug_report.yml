@@ -35,13 +35,6 @@ body:
     validations:
       required: true
 
-  - type: input
-    id: java-version
-    attributes:
-      label: Java version
-      description: Output of `java -version`, if your Pact library runs on the JVM. The plugin itself needs no JVM.
-      placeholder: "temurin-21.0.3"
-
   - type: dropdown
     id: side
     attributes:

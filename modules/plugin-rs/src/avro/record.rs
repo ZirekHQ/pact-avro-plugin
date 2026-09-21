@@ -602,7 +602,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_number_text_reports_the_java_style_message() {
+    fn invalid_number_text_reports_the_number_format_message() {
         let schema = schema_with_field(r#"{"name":"f","type":"int"}"#);
         let errors = build(&schema, json!({"f": "matching(type, 'abc')"})).unwrap_err();
         assert_eq!(errors[0].to_string(), "For input string: \"abc\"");
