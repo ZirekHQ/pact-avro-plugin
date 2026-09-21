@@ -1,20 +1,17 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-ART_DIR=target/artifacts
 VERSION=99.9.9
-
+crate=modules/plugin-rs
+exe=pact-avro-plugin
 case "$(uname -s)" in
-
-   Darwin|Linux|CYGWIN*|MINGW32*|MSYS*|MINGW*)
-     echo '== Installing plugin =='
-     mkdir -p ~/.pact/plugins/avro-${VERSION}
-     cp $ART_DIR/pact-plugin.json ~/.pact/plugins/avro-${VERSION}/pact-plugin.json
-     tar -xzvf $ART_DIR/pact-avro-plugin.tgz -C ~/.pact/plugins/avro-${VERSION}
-     ;;
-
-   *)
-     echo "ERROR: $(uname -s) is not a supported operating system"
-     exit 1
-     ;;
+  MINGW*|MSYS*|CYGWIN*) exe=pact-avro-plugin.exe ;;
+  *) ;;
 esac
+dest="${PACT_PLUGIN_DIR:-$HOME/.pact/plugins}/avro-${VERSION}"
+
+echo '== Installing Rust plugin =='
+mkdir -p "$dest"
+bash scripts/render-release-files.sh "$VERSION" "$dest" manifest
+cp "$crate/target/release/$exe" "$dest/$exe"
+chmod +x "$dest/$exe"
