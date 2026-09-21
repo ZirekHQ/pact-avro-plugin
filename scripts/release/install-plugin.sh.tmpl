@@ -33,20 +33,29 @@ download() {
 
 sha256_of() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
-  else shasum -a 256 "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else fail "sha256sum or shasum is required to verify the download"
   fi
+}
+
+verify_checksum() {
+  expected="$(cut -d' ' -f1 "$1.sha256")"
+  [ -n "$expected" ] || fail "empty checksum for ${1##*/}"
+  [ "$expected" = "$(sha256_of "$1")" ] || fail "checksum mismatch for ${1##*/}"
 }
 
 install_binary() {
   asset="pact-avro-plugin-$1-$2$3.gz"
-  work="$(mktemp -d)"
-  trap 'rm -rf "$work"' EXIT
   download "$BASE_URL/$asset" "$work/$asset"
   download "$BASE_URL/$asset.sha256" "$work/$asset.sha256"
-  [ "$(cut -d' ' -f1 "$work/$asset.sha256")" = "$(sha256_of "$work/$asset")" ] \
-    || fail "checksum mismatch for $asset"
+  verify_checksum "$work/$asset"
   gunzip -c "$work/$asset" > "$PLUGIN_DIR/pact-avro-plugin$3"
   chmod +x "$PLUGIN_DIR/pact-avro-plugin$3"
+}
+
+install_manifest() {
+  download "$BASE_URL/pact-plugin.json" "$work/pact-plugin.json"
+  mv "$work/pact-plugin.json" "$PLUGIN_DIR/pact-plugin.json"
 }
 
 os="$(detect_os)"
@@ -54,7 +63,10 @@ arch="$(detect_arch)"
 ext=""
 [ "$os" = windows ] && ext=".exe"
 
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
 echo "== Installing avro plugin ${VERSION} (${os}-${arch}) into ${PLUGIN_DIR} =="
 mkdir -p "$PLUGIN_DIR"
 install_binary "$os" "$arch" "$ext"
-download "$BASE_URL/pact-plugin.json" "$PLUGIN_DIR/pact-plugin.json"
+install_manifest

@@ -18,7 +18,7 @@ bash "$here/render-release-files.sh" "$version" "$release" manifest
 bash "$here/render-release-files.sh" "$version" "$tmp/out" all
 
 run_install() {
-  PACT_AVRO_PLUGIN_BASE_URL="file://$release" PACT_PLUGIN_DIR="$tmp/plugins" sh "$tmp/out/install-plugin.sh"
+  PATH="${install_path:-$PATH}" PACT_AVRO_PLUGIN_BASE_URL="file://$release" PACT_PLUGIN_DIR="$tmp/plugins" sh "$tmp/out/install-plugin.sh"
 }
 
 run_install
@@ -27,12 +27,31 @@ test -x "$dest/pact-avro-plugin"
 test "$("$dest/pact-avro-plugin")" = fake-plugin
 grep -q "\"version\": \"$version\"" "$dest/pact-plugin.json"
 
-rm -rf "$tmp/plugins"
-echo tampered > "$release/pact-avro-plugin-$os-$arch.gz.sha256"
-if run_install 2>/dev/null; then
-  echo "expected a checksum mismatch to fail the install" >&2
-  exit 1
-fi
-test ! -e "$dest/pact-avro-plugin"
-test ! -e "$dest/pact-plugin.json"
+sha_file="$release/pact-avro-plugin-$os-$arch.gz.sha256"
+
+assert_install_rejected() {
+  local expected_message="$1"
+  rm -rf "$tmp/plugins"
+  if run_install 2>"$tmp/stderr"; then
+    echo "expected the install to fail: $expected_message" >&2
+    exit 1
+  fi
+  grep -qF "$expected_message" "$tmp/stderr"
+  test ! -e "$dest/pact-avro-plugin"
+  test ! -e "$dest/pact-plugin.json"
+}
+
+echo tampered > "$sha_file"
+assert_install_rejected "checksum mismatch"
+
+: > "$sha_file"
+assert_install_rejected "empty checksum"
+
+echo "tampered" > "$sha_file"
+no_hash_bin="$tmp/no-hash-bin"
+mkdir -p "$no_hash_bin"
+for tool in sh cut curl gunzip gzip mktemp mkdir chmod rm mv uname cat; do
+  ln -s "$(command -v "$tool")" "$no_hash_bin/$tool"
+done
+install_path="$no_hash_bin" assert_install_rejected "sha256sum or shasum is required"
 echo "install script tests passed"
