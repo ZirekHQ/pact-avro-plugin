@@ -28,15 +28,11 @@ ThisBuild / githubWorkflowBuild := Seq(
     name = Some("Setup protoc"),
     params = Map("repo-token" -> "${{ secrets.GITHUB_TOKEN }}")
   ),
-  WorkflowStep.Use(
-    UseRef.Public("dtolnay", "rust-toolchain", "6bed0761d98439e5a578e2877258200ad565ba87"),
-    name = Some("Setup Rust toolchain"),
-    params = Map("toolchain" -> "stable", "components" -> "clippy, rustfmt")
-  ),
   WorkflowStep.Run(
     name = Some("Build and test Rust plugin"),
     commands = List(
       "cd modules/plugin-rs",
+      "rustup toolchain install",
       "cargo fmt --check",
       "cargo build --locked --verbose",
       "cargo test --locked --verbose",
