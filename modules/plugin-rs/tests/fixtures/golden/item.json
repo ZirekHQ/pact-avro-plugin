@@ -1,0 +1,1 @@
+{"name":"item","schema":"item.avsc","record":"Item","config":{"id":"notEmpty('41')","name":"notEmpty('Item-41')"},"contentType":"avro/binary;record=Item","bodyHex":"0e4974656d2d343152","rules":{"$.id":[{"type":"not-empty","values":{}}],"$.name":[{"type":"not-empty","values":{}}]}}

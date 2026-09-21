@@ -31,15 +31,6 @@ impl PluginError {
             "'UNION' type is only supported to make field nullable, field: '{field_name}' with value: '{field_value}'"
         ))
     }
-
-    /// Mirrors FieldInvalidSchemaException. The "wasn't find" grammar below
-    /// is intentional — verbatim parity with the Scala original's message
-    /// text, not a typo to correct.
-    pub fn field_invalid_schema(field_name: &str, field_value: &str) -> Self {
-        PluginError::Message(format!(
-            "A valid schema wasn't find for field: '{field_name}' with value: '{field_value}'"
-        ))
-    }
 }
 
 #[cfg(test)]

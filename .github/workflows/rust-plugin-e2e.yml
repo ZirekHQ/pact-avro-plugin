@@ -1,0 +1,97 @@
+name: Rust Plugin E2E
+
+on:
+  pull_request:
+    branches: ['**']
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Consumer and provider against the Rust plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: zulu
+          java-version: 17
+          cache: sbt
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@82da71df4e122282484a99a8d70096bc2369dbd8
+
+      - name: Set outputs
+        id: vars
+        run: echo "git_tag=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: stable
+
+      - name: Build Rust plugin
+        run: cargo build --locked --release
+        working-directory: modules/plugin-rs
+
+      - name: Install Rust plugin
+        run: scripts/pluginLocalInstallRs.sh
+
+      - name: Start pact-broker
+        run: docker compose up -d pact-broker
+
+      - name: Wait for pact-broker
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9292/diagnostic/status/heartbeat > /dev/null; then
+              echo "pact-broker is up"
+              exit 0
+            fi
+            echo "waiting for pact-broker..."
+            sleep 2
+          done
+          echo "pact-broker did not become ready in time" >&2
+          exit 1
+
+      - name: Install pact-broker CLI
+        uses: pactflow/actions@460a066c6987f3ed621d3375e6f32dfe50cf1226
+
+      - name: Test Consumer
+        run: >
+          sbt
+          'set consumer / Test / envVars := Map("PACT_PLUGIN_DIR" -> (sys.env("HOME") + "/.pact/plugins"))'
+          'consumer/test'
+
+      - name: Pact publish
+        env:
+          PACT_BROKER_BASE_URL: 'http://localhost:9292'
+          GIT_TAG: ${{ steps.vars.outputs.git_tag }}
+        run: pact-broker publish "modules/examples/consumer/target/pacts" --consumer-app-version="${GIT_TAG}-rs" --tag="${GIT_TAG}-rs"
+
+      - name: Test Provider
+        env:
+          PACT_BROKER_BASE_URL: 'http://localhost:9292'
+          PACT_BROKER_TAG: ${{ steps.vars.outputs.git_tag }}-rs
+        run: >
+          sbt
+          'set provider / Test / envVars := Map("PACT_PLUGIN_DIR" -> (sys.env("HOME") + "/.pact/plugins"))'
+          'provider/test'
+
+      - name: Broker logs
+        if: failure()
+        run: docker compose logs pact-broker
