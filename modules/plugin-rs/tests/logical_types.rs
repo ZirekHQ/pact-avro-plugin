@@ -38,7 +38,14 @@ fn body_of(schema_text: &str) -> Vec<u8> {
 #[test]
 fn example_schemas_with_logical_types_parse() {
     ["orders.avsc", "order-v1.avsc"].iter().for_each(|name| {
-        let path = Path::new(AVRO_DIR).join(name);
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(AVRO_DIR)
+            .join(name);
+        assert!(
+            path.exists(),
+            "example schema missing at {}",
+            path.display()
+        );
         assert!(parse_file(&path).is_ok(), "{name} must parse");
     });
 }
