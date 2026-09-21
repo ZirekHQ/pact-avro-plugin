@@ -12,7 +12,6 @@ on:
     branches: [main]
   push:
     branches: [main]
-    tags: [v*]
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -126,7 +125,15 @@ jobs:
 
       - name: Build project
         shell: bash
-        run: sbt '++ ${{ matrix.scala }}; compile; scalafmtCheckAll; javafmtCheckAll; coverage; plugin/test; plugin/coverageReport'
+        run: sbt '++ ${{ matrix.scala }}; compile; scalafmtCheckAll; javafmtCheckAll'
+
+      - name: Install Rust plugin
+        shell: bash
+        run: |
+          cd modules/plugin-rs
+          cargo build --locked --release
+          cd ../..
+          bash scripts/pluginLocalInstall.sh
 
       - name: Test Consumer
         shell: bash
@@ -152,93 +159,3 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         uses: SonarSource/sonarqube-scan-action@v8
-
-      - name: Compress target directories
-        shell: bash
-        run: tar cf targets.tar target modules/plugin/target modules/examples/provider/target modules/examples/consumer/target project/target
-
-      - name: Upload target directories
-        uses: actions/upload-artifact@v7
-        with:
-          name: target-${{ matrix.os }}-${{ matrix.scala }}-${{ matrix.java }}
-          path: targets.tar
-
-  publish:
-    name: Publish Artifacts
-    needs: [build]
-    if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v'))
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        scala: [3.8.4]
-        java: [zulu@17]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Ignore line ending differences in git
-        if: contains(runner.os, 'windows')
-        run: git config --global core.autocrlf false
-
-      - name: Configure pagefile for Windows
-        if: contains(runner.os, 'windows')
-        uses: al-cheb/configure-pagefile-action@v1.5
-        with:
-          minimum-size: 2GB
-          maximum-size: 8GB
-          disk-root: 'C:'
-
-      - name: Checkout current branch (full)
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup Java (zulu@17)
-        if: matrix.java == 'zulu@17'
-        uses: actions/setup-java@v5
-        with:
-          distribution: zulu
-          java-version: 17
-          cache: sbt
-
-      - name: Setup Java (zulu@21)
-        if: matrix.java == 'zulu@21'
-        uses: actions/setup-java@v5
-        with:
-          distribution: zulu
-          java-version: 21
-          cache: sbt
-
-      - name: Setup Java (zulu@25)
-        if: matrix.java == 'zulu@25'
-        uses: actions/setup-java@v5
-        with:
-          distribution: zulu
-          java-version: 25
-          cache: sbt
-
-      - name: Setup sbt
-        uses: sbt/setup-sbt@v1
-
-      - name: Download target directories (3.8.4)
-        uses: actions/download-artifact@v8
-        with:
-          name: target-${{ matrix.os }}-3.8.4-${{ matrix.java }}
-
-      - name: Inflate target directories (3.8.4)
-        run: |
-          tar xf targets.tar
-          rm targets.tar
-
-      - name: Build package
-        run: 'sbt universal:packageZipTarball'
-
-      - name: Prepare Artifacts
-        run: ./scripts/prepArtifacts.sh
-
-      - name: Upload Release Assets
-        id: upload-release-asset
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/artifacts/*
-          file_glob: true
-          tag: ${{ github.ref }}

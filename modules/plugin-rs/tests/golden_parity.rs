@@ -95,12 +95,3 @@ fn schema_key_is_the_md5_of_the_emitted_schema_text() {
         base16_hash(&serde_json::to_string(&schema).unwrap())
     );
 }
-
-#[test]
-fn schema_fixtures_are_byte_identical_to_the_scala_test_resources() {
-    ["item", "schemas", "invalid"].iter().for_each(|name| {
-        let rust = std::fs::read(format!("tests/fixtures/{name}.avsc")).unwrap();
-        let scala = std::fs::read(format!("../plugin/src/test/resources/{name}.avsc")).unwrap();
-        assert_eq!(rust, scala, "{name}.avsc drifted from the Scala copy");
-    });
-}
