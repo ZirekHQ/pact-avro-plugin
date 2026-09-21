@@ -198,5 +198,6 @@ jobs:
           persist-credentials: false
       - name: Install and verify
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.version.outputs.version }}
         run: bash scripts/smoke-install.sh "v${VERSION}"

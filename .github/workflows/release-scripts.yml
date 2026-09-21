@@ -28,3 +28,7 @@ jobs:
         run: bash scripts/test-install-plugin.sh
       - name: Versioning tests
         run: bash scripts/test-versioning.sh
+      - name: pact-plugin-cli download tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/test-fetch-pact-plugin-cli.sh
