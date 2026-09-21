@@ -18,7 +18,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
       - name: Setup Rust toolchain
         run: rustup toolchain install
         working-directory: modules/plugin-rs
