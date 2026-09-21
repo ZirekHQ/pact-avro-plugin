@@ -1,6 +1,10 @@
 [advisories]
 version = 2
-ignore = []
+ignore = [
+    { id = "RUSTSEC-2021-0139", reason = "ansi_term is unmaintained; reached through pact_matching and no fixed release exists" },
+    { id = "RUSTSEC-2020-0095", reason = "difference is unmaintained; reached through pact_matching and no fixed release exists" },
+    { id = "RUSTSEC-2025-0057", reason = "fxhash is unmaintained; reached through hashers from pact_models and no fixed release exists" },
+]
 
 [licenses]
 version = 2
