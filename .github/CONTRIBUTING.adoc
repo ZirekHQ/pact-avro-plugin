@@ -46,7 +46,7 @@ Rust changes use `feat(rust):` / `fix(rust):`. Breaking changes append `!`.
 
 === Building the plugin
 
-The plugin is written in Rust. Building it needs `protoc` and the toolchain pinned in `modules/plugin-rs/rust-toolchain.toml`.
+The plugin is written in Rust. Building it needs the toolchain pinned in `modules/plugin-rs/rust-toolchain.toml`.
 
 [source,shell]
 ----

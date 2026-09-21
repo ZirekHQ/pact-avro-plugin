@@ -84,6 +84,7 @@ fn content_mismatch(mismatch: Mismatch) -> ContentMismatch {
         mismatch: mismatch.message,
         path: mismatch.path,
         diff: String::new(),
+        mismatch_type: String::new(),
     }
 }
 

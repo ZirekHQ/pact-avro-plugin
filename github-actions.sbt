@@ -26,12 +26,6 @@ ThisBuild / githubWorkflowBuild := Seq(
       """echo "git_tag=$(git describe --tags)" >> $GITHUB_OUTPUT"""
     )
   ),
-  // Pinned to full SHAs (Sonar githubactions:S7637): setup-protoc = v3.0.0.
-  WorkflowStep.Use(
-    UseRef.Public("arduino", "setup-protoc", "c65c819552d16ad3c9b72d9dfd5ba5237b9c906b"),
-    name = Some("Setup protoc"),
-    params = Map("repo-token" -> "${{ secrets.GITHUB_TOKEN }}")
-  ),
   WorkflowStep.Run(
     name = Some("Build and test Rust plugin"),
     commands = List(

@@ -240,6 +240,7 @@ mod tests {
                 contents: None,
                 generators: Default::default(),
                 plugin_configuration: None,
+                ..Default::default()
             }))
             .await
             .expect_err("GenerateContent must return an error");
