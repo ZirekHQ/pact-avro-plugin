@@ -12,4 +12,4 @@ Avro `map` fields with two or more entries encode their entries in an unspecifie
 
 == Versioning
 
-Releases follow semantic versioning. While the major version is 0, a breaking change to pact content or behavior bumps the minor version.
+Releases follow semantic versioning, computed from Conventional Commit subjects: a breaking change bumps the major version, a new feature the minor version, and a fix the patch version.

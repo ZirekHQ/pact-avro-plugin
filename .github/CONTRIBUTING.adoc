@@ -102,7 +102,9 @@ docker compose -f docker-compose.yml down
 === Releasing
 
 Releases are cut by running the "Prepare release" workflow. It computes the next version from Conventional Commit subjects since the last tag and opens a `chore: bump version -> X.Y.Z` pull request.
-Merging that pull request tags the merge commit and publishes the release.
+Squash- or rebase-merge that pull request: a merge commit does not match the release trigger, so nothing is tagged or published. The merge tags the commit and publishes the release.
+To release a version outside the computed bump, run "Prepare release" with `new_tag` set to `vX.Y.Z`; the run needs approval in the `release` environment.
 If a release run fails after the tag is pushed, re-run the failed workflow run: tagging is idempotent, and a version whose release already exists is refused.
+If the post-publish smoke test fails, fix on `main` and cut a patch release; never delete or move a published tag or release.
 
 include::docs/README.adoc[]

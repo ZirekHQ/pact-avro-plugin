@@ -21,7 +21,7 @@ The plugin is a single native binary. Releases publish one binary per platform.
 |Windows |x86_64, aarch64
 |===
 
-Linux binaries need glibc 2.35 or newer (for example Ubuntu 22.04, Debian 12, RHEL 9 and later).
+Linux binaries need glibc 2.35 or newer (for example Ubuntu 22.04 and Debian 12 and later).
 
 Plugin installation requires the plugin executable and the plugin manifest in a Pact plugin directory. By default this is `.pact/plugins/avro-<version>` in the home directory (`$HOME/.pact/plugins/avro-{version}` for version {version}).
 
