@@ -14,7 +14,7 @@ chmod +x "$tmp/pact-plugin-cli"
 check_install() {
   local root="$1"
   local bin="$root/avro-$version/pact-avro-plugin"
-  test "$("$bin" --version)" = "$version"
+  [[ "$("$bin" --version)" == "$version" ]]
   grep -qF "\"version\": \"$version\"" "$root/avro-$version/pact-plugin.json"
 }
 
