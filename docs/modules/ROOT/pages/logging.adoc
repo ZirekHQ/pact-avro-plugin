@@ -1,10 +1,5 @@
 = Logging
 
-The plugin uses https://logback.qos.ch[Logback] to log to
+The plugin writes logs to standard error. It does not write a log file.
 
-* standard output
-* `log/plugin.log` file in in the plugin directory.
-
-The default log level is set to `ERROR` level and can be changed by the `LOG_LEVEL` environment variable that is passed into the plugin process (this should be set by the framework calling it).
-
-The default file logging is set to roll daily or whenever the file size reaches 50MB. Logger will keep 30 days' worth of logging history
+The default log level is `info`. Set the `RUST_LOG` environment variable in the environment that launches the plugin process (for example `RUST_LOG=debug`) to change it.

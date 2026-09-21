@@ -9,28 +9,36 @@ Tests are supported by using the V4 asynchronous message Pact format, and the se
 
 == Installation
 
-The executable binaries and plugin manifest file for the plugin can be downloaded from the project link:../releases[releases page].
+The plugin is a single native binary. Releases publish one binary per platform.
 
-Plugin installation requires the plugin executable binary as well as the plugin manifest file to be unpacked/copied into a Pact plugin directory. By default, this will be `.pact/plugins/avro-<version>` in the home directory (i.e.
-`$HOME/.pact/plugins/avro-{version}` for version {version}).
+.Supported platforms
+[cols="1,1"]
+|===
+|OS |Architectures
+
+|Linux |x86_64, aarch64
+|macOS |x86_64, aarch64
+|Windows |x86_64, aarch64
+|===
+
+Linux binaries need glibc 2.35 or newer (for example Ubuntu 22.04 and Debian 12 and later).
+
+Plugin installation requires the plugin executable and the plugin manifest in a Pact plugin directory. By default this is `.pact/plugins/avro-<version>` in the home directory (`$HOME/.pact/plugins/avro-{version}` for version {version}).
 
 === Automated
 
-The https://github.com/pact-foundation/pact-plugins/tree/main/cli[pact-plugin-cli] can be used to install the Avro plugin. See the https://github.com/pact-foundation/pact-plugins/tree/main/cli#installing[CLI installation] on how to install it.
-
-To install the latest version, run
+The https://github.com/pact-foundation/pact-plugins/tree/main/cli[pact-plugin-cli] installs the plugin. See the https://github.com/pact-foundation/pact-plugins/tree/main/cli#installing[CLI installation] instructions.
 
 [source,shell]
 ----
-pact-plugin-cli -y install https://github.com/austek/pact-avro-plugin/releases/latest
+pact-plugin-cli -y install https://github.com/ZirekHQ/pact-avro-plugin/releases/latest
 ----
 
 === Manual
 
-.Run install-plugin.sh:
 [source,shell]
 ----
-wget -O - https://github.com/austek/pact-avro-plugin/releases/latest/download/install-plugin.sh | bash
+curl -fsSL https://github.com/ZirekHQ/pact-avro-plugin/releases/latest/download/install-plugin.sh | sh
 ----
 
-INFORMATION:: The default plugin directory (`$HOME/.pact/plugins`) can be changed by setting the `PACT_PLUGIN_DIR` environment variable.
+INFORMATION:: Set the `PACT_PLUGIN_DIR` environment variable to change the default plugin directory (`$HOME/.pact/plugins`).
