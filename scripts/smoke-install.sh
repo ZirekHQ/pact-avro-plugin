@@ -15,7 +15,7 @@ check_install() {
   local root="$1"
   local bin="$root/avro-$version/pact-avro-plugin"
   test "$("$bin" --version)" = "$version"
-  grep -q "\"version\": \"$version\"" "$root/avro-$version/pact-plugin.json"
+  grep -qF "\"version\": \"$version\"" "$root/avro-$version/pact-plugin.json"
 }
 
 PACT_PLUGIN_DIR="$tmp/cli" "$tmp/pact-plugin-cli" -y install "$repo/releases/tag/$tag"
