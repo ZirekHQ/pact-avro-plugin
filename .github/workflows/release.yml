@@ -47,6 +47,11 @@ jobs:
         run: |
           set -euo pipefail
           cargo_version="$(awk '/^\[package\]/{f=1;next} /^\[/{f=0} f && /^version = /{gsub(/version = "|"/,""); print; exit}' modules/plugin-rs/Cargo.toml)"
+          semver_re='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if [[ ! "$cargo_version" =~ $semver_re ]]; then
+            echo "::error::Cargo.toml version '${cargo_version}' is not an X.Y.Z version" >&2
+            exit 1
+          fi
           if [ -n "${NEW_TAG:-}" ] && [ "${NEW_TAG#v}" != "$cargo_version" ]; then
             echo "::error::tag ${NEW_TAG} does not match Cargo.toml version ${cargo_version}" >&2
             exit 1
