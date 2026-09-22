@@ -18,28 +18,28 @@ in some type of map form.
 For each field of the message that we want in the contract, we define an entry with the field name as the key and
 a matching definition as the value. For documentation on the matching definition format, see https://github.com/pact-foundation/pact-plugins/blob/main/docs/matching-rule-definition-expressions.md[Matching Rule definition expressions].
 
-For example, for a JVM test (taken from https://developers.google.com/protocol-buffers/docs/javatutorial[Protocol Buffer Java examples]) we would use the PactBuilder class:
+For example, we would use the `pact_consumer` `PactBuilder`:
 
 .Example Avro schema
 [%collapsible]
 ====
 [source,avroschema]
 ----
-include::example$consumer/src/main/resources/avro/orders.avsc[]
+include::example$plugin-rs/tests/fixtures/e2e/orders.avsc[]
 ----
 ====
 
 .Consumer configuration
-[source,java]
+[source,rust]
 ----
-include::example$consumer/src/test/java/com/github/austek/example/pulsar/avro/PactPulsarConsumerTest.java[tags=configuration]
+include::example$plugin-rs/tests/e2e_consumer.rs[tags=configuration]
 ----
 
 
-.Java example consumer test
-[source,java]
+.Rust example consumer test
+[source,rust]
 ----
-include::example$consumer/src/test/java/com/github/austek/example/pulsar/avro/PactPulsarConsumerTest.java[tags=consumer_test]
+include::example$plugin-rs/tests/e2e_consumer.rs[tags=consumer_test]
 ----
 
 == Provider
@@ -50,11 +50,11 @@ from the consumer. There are two main ways of verifying the provider:
 . Write a test in the provider code base that can call the provider to generate the message.
 . Use an HTTP proxy server that can call the provider and return the generated message, and then use a Pact framework verifier to verify it.
 
-.Java example provider test
+.Rust example provider test
 [%collapsible]
 ====
-[source,java]
+[source,rust]
 ----
-include::example$provider/src/test/java/com/github/austek/example/pulsar/avro/PactPulsarProducerTest.java[]
+include::example$plugin-rs/tests/e2e_provider.rs[]
 ----
 ====

@@ -6,7 +6,7 @@ as well as the https://github.com/pact-foundation/pact-plugins[Pact plugin frame
 
 Supported Pact framework versions:
 
-- https://github.com/pact-foundation/pact-jvm[Pact-JVM v4.6.x] / JDK 17+
+- https://github.com/pact-foundation/pact-jvm[Pact-JVM v4.6.x]
 - https://github.com/pact-foundation/pact-reference/tree/master/rust/pact_consumer[Pact-Rust Consumer v0.9.x]
 - https://github.com/pact-foundation/pact-reference/tree/master/rust/pact_verifier_cli[Pact-Rust Verifier v0.9.x]
 - https://github.com/pact-foundation/pact-go[Pact-Go v2.0.0]

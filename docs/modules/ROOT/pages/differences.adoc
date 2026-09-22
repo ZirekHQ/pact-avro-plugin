@@ -1,6 +1,6 @@
 = Differences from 0.0.x
 
-Version 0.1.0 replaces the JVM plugin with a native binary. No JVM is needed to run the plugin.
+Version 0.1.0 changed the emitted schema text and map field encoding order from 0.0.x — see below.
 
 == Regenerated pacts differ once
 

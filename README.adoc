@@ -6,7 +6,7 @@ ____
 
 == Installation
 
-The plugin is a native binary and needs no JVM. See the documentation for link:docs/modules/ROOT/pages/getting_started.adoc[install instructions].
+See the documentation for link:docs/modules/ROOT/pages/getting_started.adoc[install instructions].
 
 == Development Roadmap
 
