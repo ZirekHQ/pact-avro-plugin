@@ -2,7 +2,14 @@ use crate::avro::schema::{parse_file, parse_str};
 use crate::constants::{AVRO_SCHEMA, CONTENT_TYPES_STR, RECORD_NAME, SCHEMA_KEY};
 use crate::error::PluginError;
 use crate::pact_plugin::pact_plugin_server::PactPlugin;
-use crate::pact_plugin::*;
+use crate::pact_plugin::{
+    catalogue_entry, Catalogue, CatalogueEntry, CompareContentsRequest, CompareContentsResponse,
+    ConfigureInteractionRequest, ConfigureInteractionResponse, GenerateContentRequest,
+    GenerateContentResponse, InitPluginRequest, InitPluginResponse, MockServerRequest,
+    MockServerResults, ShutdownMockServerRequest, ShutdownMockServerResponse,
+    StartMockServerRequest, StartMockServerResponse, VerificationPreparationRequest,
+    VerificationPreparationResponse, VerifyInteractionRequest, VerifyInteractionResponse,
+};
 use prost_types::{value::Kind, Struct, Value};
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
