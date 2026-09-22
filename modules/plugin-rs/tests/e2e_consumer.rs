@@ -32,12 +32,12 @@ fn record_field<'a>(fields: &'a [(String, AvroValue)], name: &str) -> &'a AvroVa
 #[tokio::test]
 #[ignore]
 async fn order_created_message_matches_the_built_plugin() {
+    // tag::configuration[]
     let mut builder = PactBuilder::new_v4("avro-plugin-consumer", "avro-plugin-provider")
         .using_plugin("avro", None)
         .await;
     builder.output_dir("tests/e2e/pacts");
 
-    // tag::configuration[]
     builder
         .message_interaction("Order Created", |mut i| async move {
             i.contents_from(json!({
@@ -67,7 +67,9 @@ async fn order_created_message_matches_the_built_plugin() {
     // end::configuration[]
 
     // tag::consumer_test[]
-    for message in builder.messages() {
+    let messages: Vec<_> = builder.messages().collect();
+    assert_eq!(messages.len(), 1, "expected exactly one generated message");
+    for message in messages {
         assert_eq!(
             message
                 .contents
@@ -150,7 +152,9 @@ async fn order_new_event_message_matches_the_built_plugin() {
         })
         .await;
 
-    for message in builder.messages() {
+    let messages: Vec<_> = builder.messages().collect();
+    assert_eq!(messages.len(), 1, "expected exactly one generated message");
+    for message in messages {
         assert_eq!(
             message
                 .contents
