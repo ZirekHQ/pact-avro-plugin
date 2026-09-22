@@ -2,9 +2,9 @@
 
 == Turn on debug logging first
 
-The plugin logs full detail (including stack traces for schema parsing and serialisation failures) at `DEBUG`, but only returns a short message to the Pact framework. Set `LOG_LEVEL=DEBUG` in the environment that launches the plugin process and check `log/plugin.log` in the plugin directory (or standard output) before digging further. See xref:logging.adoc[].
+The plugin logs detail that it does not return to the Pact framework, which only receives a short message. Set `RUST_LOG=debug` in the environment that launches the plugin process and check the plugin's standard error output before digging further. See xref:logging.adoc[].
 
-If a response says `Multiple errors detected and logged, please check logs`, the individual causes are only in the log file, not in the error returned to your test framework.
+If a response says `Multiple errors detected and logged, please check logs`, the individual causes are only in the plugin log, not in the error returned to your test framework.
 
 == Common errors
 

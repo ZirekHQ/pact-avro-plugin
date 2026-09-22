@@ -11,7 +11,8 @@ behaviour against a particular Pact implementation or Avro type, say which.
 
 ### Checklist
 
-- [ ] Tests cover the change (`plugin/test`, and `consumer/test` if the DSL is affected)
-- [ ] `sbt scalafmtCheckAll javafmtCheckAll` passes
+- [ ] Tests cover the change (`cargo test --locked` in `modules/plugin-rs`; `sbt consumer/test provider/test` if the examples are affected)
+- [ ] `cargo fmt --check` and `cargo clippy --locked --all-targets -- -D warnings` pass
+- [ ] `sbt scalafmtCheckAll javafmtCheckAll` passes, if the examples changed
 - [ ] Documentation updated, if the change is user-facing
-- [ ] Workflows regenerated with `sbt githubWorkflowGenerate` if the build changed
+- [ ] `ci.yml` regenerated with `sbt githubWorkflowGenerate` if `build.sbt` changed

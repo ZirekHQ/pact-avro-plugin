@@ -1,7 +1,5 @@
 import BuildSettings.*
 import Dependencies.*
-import PublishSettings.*
-import TestEnvironment.*
 
 ThisBuild / scalaVersion := scalaV
 //ThisBuild / conflictManager := ConflictManager.strict
@@ -13,38 +11,10 @@ lazy val pactOptions: Seq[Tests.Argument] = Seq(
   sys.env.get("PACT_BROKER_TAG").map(s => s"-Dpactbroker.consumerversionselectors.tags=$s"),
 ).flatten.map(o => Tests.Argument(jupiterTestFramework, o))
 
-lazy val plugin = moduleProject("plugin", "plugin")
-  .enablePlugins(
-    JavaAppPackaging,
-    // https://sbt-native-packager.readthedocs.io/en/stable/recipes/longclasspath.html#long-classpaths
-    LauncherJarPlugin
-  )
-  .settings(
-    git.useGitDescribe := true,
-    name := "plugin",
-    maintainer := "aliustek@gmail.com",
-    publishSettings,
-    testEnvSettings,
-    Compile / PB.targets := Seq(
-      scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
-    ),
-    libraryDependencies ++=
-      Dependencies.compile(apacheAvro, auPactMatchers, logback, scalaLogging, scalaPBRuntime) ++
-        Dependencies.protobuf(scalaPB) ++
-        Dependencies.test(scalaTest),
-    dependencyOverrides ++= Seq(grpcApi, grpcCore, grpcNetty),
-    coverageExcludedPackages := "io\\.pact\\.plugin\\..*",
-    coverageMinimumStmtTotal := 55,
-    coverageFailOnMinimum := true
-  )
-lazy val pluginRef = LocalProject("plugin")
-
 lazy val provider = moduleProject("provider", "examples/provider")
   .enablePlugins(SbtAvro)
   .settings(
     avroVersion := Versions.avro,
-    Test / sbt.Keys.test := (Test / sbt.Keys.test).dependsOn(pluginRef / buildTestPluginDir).value,
-    Test / envVars := Map("PACT_PLUGIN_DIR" -> ((pluginRef / target).value / "plugin").absolutePath),
     testOptions ++= pactOptions,
     libraryDependencies ++=
       Dependencies.compile(Dependencies.avroCompiler, logback, pulsar4sCore, pulsar4sAvro, scalacheck) ++
@@ -57,8 +27,6 @@ lazy val consumer = moduleProject("consumer", "examples/consumer")
   .settings(
     avroVersion := Versions.avro,
     Compile / avroSource := (Compile / resourceDirectory).value / "avro",
-    Test / sbt.Keys.test := (Test / sbt.Keys.test).dependsOn(pluginRef / buildTestPluginDir).value,
-    Test / envVars := Map("PACT_PLUGIN_DIR" -> ((pluginRef / target).value / "plugin").absolutePath),
     libraryDependencies ++=
       Dependencies.compile(Dependencies.avroCompiler, logback, pulsar4sCore, pulsar4sAvro, scalaLogging) ++
         Dependencies.test(assertJCore, jUnitInterface, pactConsumerJunit),
@@ -67,7 +35,6 @@ lazy val consumer = moduleProject("consumer", "examples/consumer")
 
 lazy val `pact-avro-plugin` = (project in file("."))
   .aggregate(
-    pluginRef,
     consumer,
     provider
   )

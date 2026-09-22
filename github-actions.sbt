@@ -7,7 +7,11 @@ ThisBuild / githubWorkflowJavaVersions := Seq(
   JavaSpec.zulu("25")
 )
 ThisBuild / githubWorkflowTargetBranches := Seq("main")
-ThisBuild / githubWorkflowTargetTags := Seq("v*")
+ThisBuild / githubWorkflowTargetTags := Seq()
+
+ThisBuild / githubWorkflowPermissions := Some(
+  Permissions.Specify(Map(PermissionScope.Contents -> PermissionValue.Read))
+)
 
 ThisBuild / githubWorkflowEnv := Map(
   "GITHUB_TOKEN" -> "${{ secrets.GITHUB_TOKEN }}"
@@ -21,6 +25,29 @@ ThisBuild / githubWorkflowBuild := Seq(
       """echo "sha_short=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_OUTPUT""",
       """echo "git_tag=$(git describe --tags)" >> $GITHUB_OUTPUT"""
     )
+  ),
+  // Pinned to a full SHA (Sonar githubactions:S7637): actions/cache = v6.1.0.
+  WorkflowStep.Use(
+    UseRef.Public("actions", "cache", "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"),
+    name = Some("Cache Cargo"),
+    params = Map(
+      "path" -> "~/.cargo/registry\n~/.cargo/git\nmodules/plugin-rs/target",
+      "key" -> "cargo-${{ runner.os }}-${{ hashFiles('modules/plugin-rs/Cargo.lock') }}",
+      "restore-keys" -> "cargo-${{ runner.os }}-"
+    )
+  ),
+  // Rust does not depend on the JDK, so lint and test it once per OS.
+  WorkflowStep.Run(
+    name = Some("Build and test Rust plugin"),
+    commands = List(
+      "cd modules/plugin-rs",
+      "rustup toolchain install",
+      "cargo fmt --check",
+      "cargo build --locked --verbose",
+      "cargo test --locked --verbose",
+      "cargo clippy --locked --all-targets -- -D warnings"
+    ),
+    cond = Some("matrix.java == 'zulu@17'")
   ),
   // Service containers only run on Linux GitHub-hosted runners, so the pact-broker
   // (and pact publish / provider verification against it) only runs on ubuntu-latest.
@@ -55,10 +82,16 @@ ThisBuild / githubWorkflowBuild := Seq(
     commands = List(
       "compile",
       "scalafmtCheckAll",
-      "javafmtCheckAll",
-      "coverage",
-      "plugin/test",
-      "plugin/coverageReport"
+      "javafmtCheckAll"
+    )
+  ),
+  WorkflowStep.Run(
+    name = Some("Install Rust plugin"),
+    commands = List(
+      "cd modules/plugin-rs",
+      "cargo build --locked --release",
+      "cd ../..",
+      "bash scripts/pluginLocalInstall.sh"
     )
   ),
   WorkflowStep.Sbt(
@@ -92,28 +125,8 @@ ThisBuild / githubWorkflowBuild := Seq(
   )
 )
 
-ThisBuild / githubWorkflowPublishTargetBranches := Seq(
-  RefPredicate.StartsWith(Ref.Tag("v"))
-)
+ThisBuild / githubWorkflowPublishTargetBranches := Seq()
 
-ThisBuild / githubWorkflowPublish := Seq(
-  WorkflowStep.Sbt(
-    name = Some("Build package"),
-    commands = List("universal:packageZipTarball")
-  ),
-  WorkflowStep.Run(
-    name = Some("Prepare Artifacts"),
-    commands = List("./scripts/prepArtifacts.sh")
-  ),
-  WorkflowStep.Use(
-    UseRef.Public("svenstaro", "upload-release-action", "v2"),
-    name = Some("Upload Release Assets"),
-    id = Some("upload-release-asset"),
-    params = Map(
-      "repo_token" -> "${{ secrets.GITHUB_TOKEN }}",
-      "file" -> "target/artifacts/*",
-      "file_glob" -> "true",
-      "tag" -> "${{ github.ref }}"
-    )
-  )
-)
+ThisBuild / githubWorkflowPublish := Seq()
+
+ThisBuild / githubWorkflowIncludeClean := false

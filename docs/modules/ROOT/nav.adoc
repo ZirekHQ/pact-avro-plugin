@@ -1,4 +1,5 @@
 * xref:getting_started.adoc[]
+* xref:differences.adoc[]
 * xref:configuration.adoc[]
 * xref:testing.adoc[]
 * xref:schema_compatibility.adoc[]

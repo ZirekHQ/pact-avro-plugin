@@ -42,23 +42,34 @@ Please provide the following information with your issue to enable us to respond
 We follow the https://github.com/bcoe/conventional-changelog-standard/blob/master/convention.md[Conventional Changelog]
 message conventions. Please ensure you follow the guidelines.
 
+Rust changes use `feat(rust):` / `fix(rust):`. Breaking changes append `!`.
+
 === Building the plugin
 
-To build the plugin, you need a working JVM environment (version 11+).
+The plugin is written in Rust. Building it needs the toolchain pinned in `modules/plugin-rs/rust-toolchain.toml`.
 
-The build tool used is `SBT` and you can build the plugin by running `sbt universal:stage`. This will compile the plugin and
-put the generated files in `modules/plugin/target/stage`. The contents of this directory
-and this will need to be copied into the Pact plugin directory. See the installation instructions on {doc-url}.
+[source,shell]
+----
+cd modules/plugin-rs
+cargo build --release
+cd ../..
+bash scripts/pluginLocalInstall.sh
+----
+
+`scripts/pluginLocalInstall.sh` copies the binary and the plugin manifest into the Pact plugin directory. See the installation instructions on {doc-url}.
 
 === Running the tests
 
 .Unit tests
 [source,shell]
 ----
-sbt plugin/test
+cd modules/plugin-rs
+cargo test --locked
 ----
 
-.Consumer tests
+Golden and schema fixtures under `modules/plugin-rs/tests/fixtures` change only in a commit whose message states why the behavior changed.
+
+.Consumer tests (example Scala app)
 [source,shell]
 ----
 sbt consumer/test
@@ -76,7 +87,7 @@ docker compose -f docker-compose.yml up -d
 ./scripts/pact-publish.sh
 ----
 
-.Provider tests
+.Provider tests (example Scala app)
 [source,shell]
 ----
 sbt provider/test
@@ -88,5 +99,14 @@ sbt provider/test
 docker compose -f docker-compose.yml down
 ----
 
+=== Releasing
+
+Releases are cut by running the "Prepare release" workflow. It computes the next version from Conventional Commit subjects since the last tag and opens a `chore: bump version -> X.Y.Z` pull request as the `zirekhq-automation` GitHub App (org secrets `AUTOMATION_APP_CLIENT_ID` and `AUTOMATION_APP_PRIVATE_KEY`), so the PR runs CI and a maintainer can approve it.
+Squash- or rebase-merge that pull request: a merge commit does not match the release trigger, so nothing is tagged or published. The merge tags the commit and publishes the release.
+To release a version outside the computed bump, run "Prepare release" with `new_tag` set to `vX.Y.Z`; the run needs approval in the `release` environment.
+If a release run fails after the tag is pushed, re-run the failed workflow run: tagging is idempotent, and a version whose release already exists is refused.
+If the post-publish smoke test fails, fix on `main` and cut a patch release; never delete or move a published tag or release.
+After the smoke test passes, the run opens a pull request against https://github.com/pact-foundation/pact-plugins[pact-foundation/pact-plugins] that adds the version to its plugin index; until that merges, `pact-plugin-cli install avro` does not see the release.
+The job needs the `PACT_PLUGINS_PR_TOKEN` secret and never fails the release run. Without the token, or to retry, run `GH_TOKEN=<token> bash scripts/index-pr.sh vX.Y.Z`.
 
 include::docs/README.adoc[]

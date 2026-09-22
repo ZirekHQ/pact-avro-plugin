@@ -1,0 +1,95 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      new_tag:
+        description: "Skip the PR: release this exact vX.Y.Z tag (requires approval)"
+        required: false
+        type: string
+      dry_run:
+        description: "Publish nothing (only with new_tag)"
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  prepare:
+    if: inputs.new_tag == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Create release App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Setup Rust toolchain
+        run: rustup toolchain install
+        working-directory: modules/plugin-rs
+      - name: Compute next version
+        id: next
+        run: |
+          set -uo pipefail
+          if version="$(bash scripts/next-version.sh)"; then rc=0; else rc=$?; fi
+          if [ "$rc" -eq 0 ]; then
+            echo "version=${version}" >> "$GITHUB_OUTPUT"
+          elif [ "$rc" -eq 1 ]; then
+            echo "::notice::Nothing release-worthy since the last tag -- skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::scripts/next-version.sh failed (exit ${rc})"
+            exit "$rc"
+          fi
+      - name: Bump version
+        if: steps.next.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.next.outputs.version }}
+        run: bash scripts/bump-version.sh "$VERSION"
+      - name: Open release PR
+        if: steps.next.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.next.outputs.version }}
+        run: |
+          set -euo pipefail
+          branch="chore/bump-${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add modules/plugin-rs/Cargo.toml modules/plugin-rs/Cargo.lock
+          git commit -m "chore: bump version -> ${VERSION}"
+          git push -u origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore: bump version -> ${VERSION}" \
+            --body "Computed by prepare-release.yml from Conventional Commit subjects since the last tag (scripts/next-version.sh). Merging this releases v${VERSION}: release.yml tags the merge commit and publishes in the same run."
+
+  gate:
+    if: inputs.new_tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: release
+    steps:
+      - run: echo "approved"
+
+  release-now:
+    needs: gate
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml # zizmor: ignore[self-repository] the $/ form is untested until release.yml has run on main
+    with:
+      new_tag: ${{ inputs.new_tag }}
+      dry_run: ${{ inputs.dry_run == true }}
+    secrets:
+      PACT_PLUGINS_PR_TOKEN: ${{ secrets.PACT_PLUGINS_PR_TOKEN }}

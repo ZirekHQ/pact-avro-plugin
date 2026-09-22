@@ -38,4 +38,3 @@ build/
 ### Docs ###
 node_modules/
 .cache/
-modules/plugin/src/site/
