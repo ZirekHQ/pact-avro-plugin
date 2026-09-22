@@ -4,6 +4,8 @@ ignore = [
     { id = "RUSTSEC-2021-0139", reason = "ansi_term is unmaintained; reached through pact_matching and no fixed release exists" },
     { id = "RUSTSEC-2020-0095", reason = "difference is unmaintained; reached through pact_matching and no fixed release exists" },
     { id = "RUSTSEC-2025-0057", reason = "fxhash is unmaintained; reached through hashers from pact_models and no fixed release exists" },
+    { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile is unmaintained; reached through pact_mock_server from pact_consumer and no fixed release exists" },
+    { id = "RUSTSEC-2023-0071", reason = "rsa has a non-constant-time timing sidechannel (Marvin Attack); reached through pact-plugin-driver and no fixed release exists" },
 ]
 
 [licenses]
