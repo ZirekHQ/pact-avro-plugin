@@ -29,9 +29,23 @@ fn record_field<'a>(fields: &'a [(String, AvroValue)], name: &str) -> &'a AvroVa
         .unwrap_or_else(|| panic!("missing field '{name}'"))
 }
 
+// pact_consumer merges into an existing pact file by default instead of
+// replacing it, so a stale file from an earlier run (e.g. a renamed or
+// removed interaction) would otherwise keep getting verified forever.
+fn reset_pact_file(consumer: &str, provider: &str) {
+    let path = Path::new("tests/e2e/pacts").join(format!("{consumer}-{provider}.json"));
+    if let Err(err) = std::fs::remove_file(&path) {
+        if err.kind() != std::io::ErrorKind::NotFound {
+            panic!("failed to reset stale pact file {}: {err}", path.display());
+        }
+    }
+}
+
 #[tokio::test]
 #[ignore]
 async fn order_created_message_matches_the_built_plugin() {
+    reset_pact_file("avro-plugin-consumer", "avro-plugin-provider");
+
     // tag::configuration[]
     let mut builder = PactBuilder::new_v4("avro-plugin-consumer", "avro-plugin-provider")
         .using_plugin("avro", None)
@@ -123,6 +137,8 @@ async fn order_created_message_matches_the_built_plugin() {
 #[tokio::test]
 #[ignore]
 async fn order_new_event_message_matches_the_built_plugin() {
+    reset_pact_file("OrderTopicConsumer", "OrderTopicV1");
+
     let mut builder = PactBuilder::new_v4("OrderTopicConsumer", "OrderTopicV1")
         .using_plugin("avro", None)
         .await;
