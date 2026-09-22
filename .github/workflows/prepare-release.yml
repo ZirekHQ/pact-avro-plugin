@@ -37,7 +37,6 @@ jobs:
           fetch-depth: 0
       - name: Setup Rust toolchain
         run: rustup toolchain install
-        working-directory: modules/plugin-rs
       - name: Compute next version
         id: next
         run: |
@@ -68,7 +67,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add modules/plugin-rs/Cargo.toml modules/plugin-rs/Cargo.lock
+          git add Cargo.toml Cargo.lock
           git commit -m "chore: bump version -> ${VERSION}"
           git push -u origin "$branch"
           gh pr create --base main --head "$branch" \

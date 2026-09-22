@@ -46,13 +46,11 @@ Rust changes use `feat(rust):` / `fix(rust):`. Breaking changes append `!`.
 
 === Building the plugin
 
-The plugin is written in Rust. Building it needs the toolchain pinned in `modules/plugin-rs/rust-toolchain.toml`.
+The plugin is written in Rust. Building it needs the toolchain pinned in `rust-toolchain.toml`.
 
 [source,shell]
 ----
-cd modules/plugin-rs
 cargo build --release
-cd ../..
 bash scripts/pluginLocalInstall.sh
 ----
 
@@ -63,18 +61,16 @@ bash scripts/pluginLocalInstall.sh
 .Unit tests
 [source,shell]
 ----
-cd modules/plugin-rs
 cargo test --locked
 ----
 
-Golden and schema fixtures under `modules/plugin-rs/tests/fixtures` change only in a commit whose message states why the behavior changed.
+Golden and schema fixtures under `tests/fixtures` change only in a commit whose message states why the behavior changed.
 
 Build and install the plugin first (see "Building the plugin" above), then:
 
 .Consumer and provider e2e tests
 [source,shell]
 ----
-cd modules/plugin-rs
 cargo test --test e2e_consumer --test e2e_provider -- --include-ignored
 ----
 
