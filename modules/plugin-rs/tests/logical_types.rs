@@ -5,7 +5,7 @@ use pact_avro_plugin::proto_json::json_object_to_struct;
 use serde_json::json;
 use std::path::Path;
 
-const AVRO_DIR: &str = "../examples/consumer/src/main/resources/avro";
+const AVRO_DIR: &str = "tests/fixtures/e2e";
 
 fn record_schema(uuid_type: &str, timestamp_type: &str) -> String {
     format!(

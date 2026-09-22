@@ -89,9 +89,7 @@ async fn order_provider_satisfies_the_consumer_pact() {
             async move { ([("content-type", "avro/binary;record=Order")], bytes).into_response() }
         }),
     );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
