@@ -11,8 +11,6 @@ behaviour against a particular Pact implementation or Avro type, say which.
 
 ### Checklist
 
-- [ ] Tests cover the change (`cargo test --locked` in `modules/plugin-rs`; `sbt consumer/test provider/test` if the examples are affected)
+- [ ] Tests cover the change (`cargo test --locked` in `modules/plugin-rs`; if plugin behavior changed, build and install the current binary via `scripts/pluginLocalInstall.sh`, then run `cargo test --test e2e_consumer --test e2e_provider -- --include-ignored`)
 - [ ] `cargo fmt --check` and `cargo clippy --locked --all-targets -- -D warnings` pass
-- [ ] `sbt scalafmtCheckAll javafmtCheckAll` passes, if the examples changed
 - [ ] Documentation updated, if the change is user-facing
-- [ ] `ci.yml` regenerated with `sbt githubWorkflowGenerate` if `build.sbt` changed

@@ -69,34 +69,13 @@ cargo test --locked
 
 Golden and schema fixtures under `modules/plugin-rs/tests/fixtures` change only in a commit whose message states why the behavior changed.
 
-.Consumer tests (example Scala app)
-[source,shell]
-----
-sbt consumer/test
-----
+Build and install the plugin first (see "Building the plugin" above), then:
 
-.Run Pact broker
+.Consumer and provider e2e tests
 [source,shell]
 ----
-docker compose -f docker-compose.yml up -d
-----
-
-.Upload Consumer Pact
-[source,shell]
-----
-./scripts/pact-publish.sh
-----
-
-.Provider tests (example Scala app)
-[source,shell]
-----
-sbt provider/test
-----
-
-.Stop Pact broker
-[source,shell]
-----
-docker compose -f docker-compose.yml down
+cd modules/plugin-rs
+cargo test --test e2e_consumer --test e2e_provider -- --include-ignored
 ----
 
 === Releasing

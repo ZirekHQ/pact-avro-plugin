@@ -39,7 +39,7 @@ body:
     id: java-version
     attributes:
       label: Java version
-      description: Output of `java -version`, if your Pact library runs on the JVM. The plugin itself needs no JVM.
+      description: Output of `java -version`, if your Pact library runs on the JVM.
       placeholder: "temurin-21.0.3"
 
   - type: dropdown

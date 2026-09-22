@@ -22,6 +22,15 @@ git clone --quiet --depth 1 "https://github.com/${upstream}.git" "$tmp/repo"
 cd "$tmp/repo"
 git switch --quiet -c "$branch"
 
+previous_had_jvm=false
+# The most recently added version's block is the last one in avro's section;
+# check whether it lists a `jvm` dependency before this run adds a new one.
+if awk '/^\[entries\.[^].]+\]$/ { on = ($0 == "[entries.avro]") } on' repository/repository.index \
+    | awk '/^\[\[entries\.avro\.versions\]\]$/ { block = "" } { block = block "\n" $0 } END { print block }' \
+    | grep -q '^name = "jvm"$'; then
+  previous_had_jvm=true
+fi
+
 status="$(bash "$here/index-add-version.sh" repository/repository.index "$tag")"
 if [[ "$status" == present ]]; then
   echo "avro ${version} is already in the index; nothing to do"
@@ -54,9 +63,12 @@ until gh repo sync "${fork_owner}/pact-plugins" && \
   sleep 5
 done
 
-body="Adds avro ${version} to the repository index.
+jvm_note=""
+if [[ "$previous_had_jvm" == true ]]; then
+  jvm_note=$'\n\nThe plugin is now a native Rust executable, so the manifest has no `jvm` dependency and uses per-OS entry points.'
+fi
 
-The plugin is now a native Rust executable, so the manifest has no \`jvm\` dependency and uses per-OS entry points.
+body="Adds avro ${version} to the repository index.${jvm_note}
 
 Release: https://github.com/ZirekHQ/pact-avro-plugin/releases/tag/${tag}
 

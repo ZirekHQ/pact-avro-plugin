@@ -28,3 +28,8 @@ tonic-prost = "0.14"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+axum = "0.8"
+pact_consumer = "1.4"
+pact_verifier = "1.4"
