@@ -23,13 +23,12 @@ cd "$tmp/repo"
 git switch --quiet -c "$branch"
 
 previous_had_jvm=false
-if grep -q '^\[\[entries\.avro\.versions\]\]$' repository/repository.index; then
-  # The most recently added version's block is the last one in the file;
-  # check whether it lists a `jvm` dependency before this run adds a new one.
-  if awk '/^\[\[entries\.avro\.versions\]\]$/ { block = "" } { block = block "\n" $0 } END { print block }' \
-      repository/repository.index | tail -30 | grep -q 'dependencies = \[.*"jvm"'; then
-    previous_had_jvm=true
-  fi
+# The most recently added version's block is the last one in avro's section;
+# check whether it lists a `jvm` dependency before this run adds a new one.
+if awk '/^\[entries\.[^].]+\]$/ { on = ($0 == "[entries.avro]") } on' repository/repository.index \
+    | awk '/^\[\[entries\.avro\.versions\]\]$/ { block = "" } { block = block "\n" $0 } END { print block }' \
+    | grep -q '^name = "jvm"$'; then
+  previous_had_jvm=true
 fi
 
 status="$(bash "$here/index-add-version.sh" repository/repository.index "$tag")"
