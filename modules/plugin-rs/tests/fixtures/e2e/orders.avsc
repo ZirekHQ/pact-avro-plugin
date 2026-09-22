@@ -1,0 +1,98 @@
+[
+  {
+    "namespace": "com.github.austek.example",
+    "type": "record",
+    "name": "Item",
+    "fields": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "id",
+        "type": "long"
+      }
+    ]
+  },
+  {
+    "namespace": "com.github.austek.example",
+    "type": "record",
+    "name": "Order",
+    "fields": [
+      {
+        "name": "id",
+        "type": "long"
+      },
+      {
+        "name": "names",
+          "type": "string"
+      },
+      {
+        "name": "enabled",
+        "type": "boolean"
+      },
+      {
+        "name": "height",
+        "type": "float"
+      },
+      {
+        "name": "width",
+        "type": "double"
+      },
+      {
+        "name": "status",
+        "type": {
+          "type": "enum",
+          "name": "Status",
+          "symbols": [
+            "CREATED",
+            "UPDATED",
+            "DELETED"
+          ],
+          "default": "CREATED"
+        }
+      },
+      {
+        "name": "address",
+        "type": {
+          "type": "record",
+          "name": "MailAddress",
+          "fields": [
+            {
+              "name": "no",
+              "type": "int"
+            },
+            {
+              "name": "street",
+              "type": "string"
+            },
+            {
+              "name": "zipcode",
+              "type": [
+                "bytes",
+                "null"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "items",
+        "type": {
+          "type": "array",
+          "items": "com.github.austek.example.Item"
+        }
+      },
+      {
+        "name": "userId",
+        "type": [
+          "null",
+          {
+            "type": "string",
+            "logicalType": "uuid"
+          }
+        ]
+      }
+    ]
+  }
+]

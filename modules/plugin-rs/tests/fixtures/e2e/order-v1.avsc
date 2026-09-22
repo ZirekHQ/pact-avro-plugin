@@ -1,0 +1,79 @@
+[
+  {
+    "type": "record",
+    "name": "OrderNewEvent",
+    "namespace": "com.github.austek.event.client.examples.showcase.schema",
+    "fields": [
+      {
+        "name": "createdOn",
+        "type": [
+          "null",
+          {
+            "type": "long",
+            "logicalType": "timestamp-micros"
+          }
+        ]
+      },
+      {
+        "name": "items",
+        "type": [
+          "null",
+          {
+            "type": "array",
+            "items": {
+              "type": "record",
+              "name": "OrderItem",
+              "namespace": "com.github.austek.event.client.examples.showcase.domain",
+              "fields": [
+                {
+                  "name": "itemId",
+                  "type": [
+                    "null",
+                    {
+                      "type": "string",
+                      "logicalType": "uuid"
+                    }
+                  ]
+                },
+                {
+                  "name": "quantity",
+                  "type": "int"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "orderId",
+        "type": [
+          "null",
+          {
+            "type": "string",
+            "logicalType": "uuid"
+          }
+        ]
+      },
+      {
+        "name": "userId",
+        "type": [
+          "null",
+          {
+            "type": "string",
+            "logicalType": "uuid"
+          }
+        ]
+      },
+      {
+        "name": "walletId",
+        "type": [
+          "null",
+          {
+            "type": "string",
+            "logicalType": "uuid"
+          }
+        ]
+      }
+    ]
+  }
+]
