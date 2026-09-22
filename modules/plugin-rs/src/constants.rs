@@ -1,13 +1,10 @@
-// Mirrors AvroPactConstants.scala
 pub const RECORD_NAME: &str = "record-name";
 
-// Mirrors AvroPluginConstants.scala
 pub const AVRO_SCHEMA: &str = "avroSchema";
 pub const RECORD: &str = "record";
 pub const SCHEMA_KEY: &str = "schemaKey";
 pub const MATCHING_RULE_CATEGORY_NAME: &str = "body";
 
-// Mirrors ContentTypeConstants.scala
 pub const CONTENT_TYPE_APPLICATION_AVRO: &str = "application/avro";
 pub const CONTENT_TYPE_AVRO_BYTES: &str = "avro/bytes";
 pub const CONTENT_TYPE_AVRO_BINARY: &str = "avro/binary";

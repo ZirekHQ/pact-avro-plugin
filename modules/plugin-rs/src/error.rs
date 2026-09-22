@@ -1,15 +1,12 @@
 use thiserror::Error;
 
-/// Mirrors Scala's `PluginError[T]` sealed trait, collapsing it and the
-/// `Field*Exception` hierarchy into one enum returned via `Result`.
 #[derive(Debug, Error)]
 pub enum PluginError {
     #[error("{0}")]
     Message(String),
 
-    /// Matches CompareContentsResponseBuilder/InteractionResponseBuilder's
-    /// behavior: each individual message is logged by the caller, and this
-    /// fixed summary is what actually surfaces to the gRPC caller.
+    /// Individual messages are logged by the caller; this fixed summary is
+    /// what actually surfaces to the gRPC caller.
     #[error("Multiple errors detected and logged, please check logs")]
     Messages(Vec<String>),
 
@@ -18,14 +15,12 @@ pub enum PluginError {
 }
 
 impl PluginError {
-    /// Mirrors FieldUnsupportedTypeException.
     pub fn field_unsupported_type(field_type: &str, field_name: &str, field_value: &str) -> Self {
         PluginError::Message(format!(
             "Type '{field_type}' is not supported for field: '{field_name}' with value: '{field_value}'"
         ))
     }
 
-    /// Mirrors FieldNotNullableException.
     pub fn field_not_nullable(field_name: &str, field_value: &str) -> Self {
         PluginError::Message(format!(
             "'UNION' type is only supported to make field nullable, field: '{field_name}' with value: '{field_value}'"

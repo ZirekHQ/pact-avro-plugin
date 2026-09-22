@@ -1,7 +1,6 @@
 use md5::{Digest, Md5};
 
-/// Mirrors AvroSchemaBase16Hash.scala: lowercase hex MD5 of the schema's
-/// canonical text form.
+/// Lowercase hex MD5 of the schema's canonical text form.
 pub fn base16_hash(schema_text: &str) -> String {
     let digest = Md5::digest(schema_text.as_bytes());
     hex::encode(digest)
