@@ -19,16 +19,13 @@ jobs:
           persist-credentials: false
       - name: Setup Rust toolchain
         run: rustup toolchain install
-        working-directory: modules/plugin-rs
       - name: Update dependencies
         run: cargo update
-        working-directory: modules/plugin-rs
       - name: Build, test, lint
         run: |
           cargo build --release
           cargo test
           cargo clippy --all-targets -- -D warnings
-        working-directory: modules/plugin-rs
 
   latest-release-smoke:
     name: Install the latest release with the latest pact-plugin-cli

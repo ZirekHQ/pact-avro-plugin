@@ -2,7 +2,7 @@ name: Rust Supply Chain
 
 on:
   pull_request:
-    paths: ['modules/plugin-rs/Cargo.*', 'modules/plugin-rs/deny.toml']
+    paths: ['Cargo.*', 'deny.toml']
   push:
     branches: [main]
   schedule:
@@ -21,5 +21,5 @@ jobs:
           persist-credentials: false
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
-          manifest-path: modules/plugin-rs/Cargo.toml
+          manifest-path: Cargo.toml
           command: check

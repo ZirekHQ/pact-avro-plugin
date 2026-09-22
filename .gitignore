@@ -1,5 +1,7 @@
 .bsp/
 target/
+/tests/e2e/pacts/
+/lcov.info
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
