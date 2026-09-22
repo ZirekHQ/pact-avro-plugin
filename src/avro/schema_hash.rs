@@ -12,7 +12,6 @@ mod tests {
 
     #[test]
     fn hashes_known_input_to_its_known_md5_hex_digest() {
-        // Well-known MD5 test vectors, not tied to any Avro schema shape.
         assert_eq!(base16_hash(""), "d41d8cd98f00b204e9800998ecf8427e");
         assert_eq!(base16_hash("test"), "098f6bcd4621d373cade4e832627b4f6");
     }

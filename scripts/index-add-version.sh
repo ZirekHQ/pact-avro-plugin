@@ -35,21 +35,30 @@ replace_avro() {
     END { if (!replaced) while ((getline l < blk) > 0) print l }' "$file"
 }
 
+add_plugin_version_from_local_test_manifest() {
+  "$cli" repository add-plugin-version file "$tmp/repository.index" "$INDEX_MANIFEST_FILE" >&2
+}
+add_plugin_version_from_github_release() {
+  "$cli" repository add-plugin-version git-hub "$tmp/repository.index" "$repo_url/releases/tag/$tag" >&2
+}
+merge_avro_update_without_reordering_other_entries() {
+  header "$tmp/repository.index"
+  replace_avro "$index" "$tmp/avro.block"
+}
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 cp "$index" "$tmp/repository.index"
 cp "$index.sha256" "$tmp/repository.index.sha256"
 
-# Test seam: a local manifest replaces the GitHub release lookup.
 if [[ -n "${INDEX_MANIFEST_FILE:-}" ]]; then
-  "$cli" repository add-plugin-version file "$tmp/repository.index" "$INDEX_MANIFEST_FILE" >&2
+  add_plugin_version_from_local_test_manifest
 else
-  "$cli" repository add-plugin-version git-hub "$tmp/repository.index" "$repo_url/releases/tag/$tag" >&2
+  add_plugin_version_from_github_release
 fi
 
 avro_block "$tmp/repository.index" > "$tmp/avro.block"
-# The CLI reorders every entry on write; keep the original file and take only the header and avro entry from its output.
-{ header "$tmp/repository.index"; replace_avro "$index" "$tmp/avro.block"; } > "$tmp/spliced"
+merge_avro_update_without_reordering_other_entries > "$tmp/spliced"
 cp "$tmp/spliced" "$index"
 printf '%s' "$(sha256sum "$index" | cut -d' ' -f1)" > "$index.sha256"
 "$cli" repository validate "$index" >&2
