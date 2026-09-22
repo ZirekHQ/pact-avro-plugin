@@ -1,0 +1,50 @@
+name: Rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Build, lint and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Rust toolchain
+        run: rustup toolchain install
+        working-directory: modules/plugin-rs
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: modules/plugin-rs
+          key: ${{ matrix.os }}
+      - name: Check formatting
+        run: cargo fmt --check
+        working-directory: modules/plugin-rs
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: modules/plugin-rs
+      - name: Unit tests
+        run: cargo test --locked
+        working-directory: modules/plugin-rs
+      - name: Build release binary
+        run: cargo build --release --locked
+        working-directory: modules/plugin-rs
+      - name: Install plugin locally
+        run: bash scripts/pluginLocalInstall.sh
+      - name: Consumer and provider e2e tests
+        run: cargo test --test e2e_consumer --test e2e_provider --locked -- --include-ignored
+        working-directory: modules/plugin-rs
