@@ -2,7 +2,7 @@
 
 For an overview how asynchronous messages work with Pact, see https://docs.pact.io/getting_started/how_pact_works/#non-http-testing-message-pact[Non-HTTP testing (Message Pact)].
 
-In this scenario, a message provider writes a Protocol Buffer message to some one-way transport mechanism, like a message queue, and a consumer
+In this scenario, a message provider writes an Avro message to some one-way transport mechanism, like a message queue, and a consumer
 then reads it. With this style of testing, the transport mechanism is abstracted away.
 
 == Consumer

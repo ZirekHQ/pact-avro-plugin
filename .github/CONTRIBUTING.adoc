@@ -69,10 +69,9 @@ cargo test --locked
 
 Golden and schema fixtures under `modules/plugin-rs/tests/fixtures` change only in a commit whose message states why the behavior changed.
 
-.Consumer and provider e2e tests
-
 Build and install the plugin first (see "Building the plugin" above), then:
 
+.Consumer and provider e2e tests
 [source,shell]
 ----
 cd modules/plugin-rs
