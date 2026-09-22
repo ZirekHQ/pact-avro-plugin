@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
-      - 'modules/examples/**'
+      - 'modules/plugin-rs/tests/**'
   release:
     types: [published]
   workflow_dispatch:

@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: shellcheck
-        run: find scripts -name '*.sh' ! -name pact-publish.sh -print0 | xargs -0 shellcheck scripts/release/install-plugin.sh.tmpl
+        run: find scripts -name '*.sh' -print0 | xargs -0 shellcheck scripts/release/install-plugin.sh.tmpl
       - name: Release file tests
         run: bash scripts/test-release-files.sh
       - name: Install script tests
