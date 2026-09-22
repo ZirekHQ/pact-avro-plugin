@@ -80,9 +80,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let start = Instant::now();
     let last_access_millis = Arc::new(AtomicU64::new(0));
-    let touch_last_access = {
+    let authenticate_and_touch = {
         let last_access_millis = last_access_millis.clone();
+        let authenticate = authenticate(server_key)?;
         move |request: tonic::Request<()>| {
+            let request = authenticate(request)?;
             record_access(&last_access_millis, start.elapsed());
             Ok(request)
         }
@@ -91,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         PactPluginServer::new(PactAvroPluginService)
             .accept_compressed(CompressionEncoding::Gzip)
             .send_compressed(CompressionEncoding::Gzip),
-        touch_last_access,
+        authenticate_and_touch,
     );
 
     let idle_shutdown = idle_watchdog(last_access_millis, start, idle_timeout);
@@ -182,6 +184,27 @@ fn idle_watchdog(
             }
         }
     })
+}
+
+/// Builds the gRPC interceptor that rejects any call whose `authorization`
+/// metadata doesn't match the `server_key` printed at handshake, mirroring
+/// the reference protobuf plugin's `AuthInterceptor`.
+fn authenticate(
+    server_key: Uuid,
+) -> Result<
+    impl Fn(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> + Clone,
+    tonic::Status,
+> {
+    let expected = tonic::metadata::MetadataValue::try_from(server_key.to_string())
+        .map_err(|err| tonic::Status::internal(format!("invalid server key: {err}")))?;
+    Ok(
+        move |request: tonic::Request<()>| match request.metadata().get("authorization") {
+            Some(value) if *value == expected => Ok(request),
+            _ => Err(tonic::Status::unauthenticated(
+                "missing or invalid authorization header",
+            )),
+        },
+    )
 }
 
 async fn shutdown_signal(idle: impl std::future::Future<Output = ()>) {
