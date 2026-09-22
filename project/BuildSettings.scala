@@ -10,7 +10,7 @@ import java.util
 object BuildSettings {
   private val javaVersion = 17
   private val env: util.Map[String, String] = System.getenv()
-  val scalaV = "3.8.4"
+  val scalaV = "3.9.0"
 
   lazy val basicSettings: Seq[Def.Setting[?]] = Seq(
     homepage := Some(URI.create("https://github.com/austek/pact-avro-plugin").toURL),
