@@ -2,10 +2,30 @@ use pact_avro_plugin::pact_plugin::pact_plugin_server::PactPluginServer;
 use pact_avro_plugin::service::PactAvroPluginService;
 use std::io::Write;
 use tokio_stream::wrappers::TcpListenerStream;
+use tonic::codec::CompressionEncoding;
+use tower_http::trace::TraceLayer;
 use uuid::Uuid;
+
+const DEFAULT_HOST: &str = "127.0.0.1";
 
 fn version_requested() -> bool {
     std::env::args().nth(1).as_deref() == Some("--version")
+}
+
+/// Reads `--host <address>` from the CLI args, defaulting to
+/// [`DEFAULT_HOST`] when absent. Returns an error if `--host` is given
+/// without a value.
+fn host_arg(args: impl Iterator<Item = String>) -> Result<String, String> {
+    let mut args = args;
+    while let Some(arg) = args.next() {
+        if arg != "--host" {
+            continue;
+        }
+        return args
+            .next()
+            .ok_or_else(|| "--host requires a value".to_string());
+    }
+    Ok(DEFAULT_HOST.to_string())
 }
 
 #[tokio::main]
@@ -23,10 +43,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
+    let host = host_arg(std::env::args().skip(1))?;
+
     // Bind before announcing the port, and keep this listener for serving:
     // reserving the OS-assigned port here closes the window in which another
     // process could claim it between lookup and bind.
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
+    let listener = tokio::net::TcpListener::bind((host.as_str(), 0)).await?;
     let port = listener.local_addr()?.port();
 
     let server_key = Uuid::new_v4();
@@ -36,8 +58,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{handshake}");
     std::io::stdout().flush()?;
 
+    let service = PactPluginServer::new(PactAvroPluginService)
+        .accept_compressed(CompressionEncoding::Gzip)
+        .send_compressed(CompressionEncoding::Gzip);
+
     tonic::transport::Server::builder()
-        .add_service(PactPluginServer::new(PactAvroPluginService))
+        .layer(TraceLayer::new_for_grpc())
+        .add_service(service)
         .serve_with_incoming_shutdown(TcpListenerStream::new(listener), shutdown_signal())
         .await?;
 
@@ -69,5 +96,27 @@ async fn shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => tracing::info!("received Ctrl-C, shutting down"),
         _ = terminate => tracing::info!("received SIGTERM, shutting down"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_defaults_when_absent() {
+        assert_eq!(host_arg(std::iter::empty()).unwrap(), DEFAULT_HOST);
+    }
+
+    #[test]
+    fn host_parses_the_flag_value() {
+        let args = vec!["--host".to_string(), "0.0.0.0".to_string()].into_iter();
+        assert_eq!(host_arg(args).unwrap(), "0.0.0.0");
+    }
+
+    #[test]
+    fn host_rejects_a_missing_value() {
+        let args = vec!["--host".to_string()].into_iter();
+        assert!(host_arg(args).is_err());
     }
 }
