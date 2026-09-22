@@ -2,12 +2,17 @@ use pact_avro_plugin::pact_plugin::pact_plugin_server::PactPluginServer;
 use pact_avro_plugin::service::PactAvroPluginService;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::codec::CompressionEncoding;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
 const DEFAULT_HOST: &str = "127.0.0.1";
+const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 600;
 
 fn version_requested() -> bool {
     std::env::args().nth(1).as_deref() == Some("--version")
@@ -48,6 +53,26 @@ fn port_reachable_via_loopback(addr: SocketAddr) -> Result<u16, String> {
     }
 }
 
+/// Reads `--timeout <seconds>` from the CLI args, defaulting to
+/// [`DEFAULT_IDLE_TIMEOUT_SECS`] when absent. A value of `0` disables the
+/// idle watchdog. Returns an error if `--timeout` is given without a value
+/// or with a non-numeric value.
+fn idle_timeout_secs(args: impl Iterator<Item = String>) -> Result<u64, String> {
+    let mut args = args;
+    while let Some(arg) = args.next() {
+        if arg != "--timeout" {
+            continue;
+        }
+        let value = args
+            .next()
+            .ok_or_else(|| "--timeout requires a value".to_string())?;
+        return value
+            .parse::<u64>()
+            .map_err(|_| format!("--timeout value must be a non-negative integer, got '{value}'"));
+    }
+    Ok(DEFAULT_IDLE_TIMEOUT_SECS)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if version_requested() {
@@ -64,6 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let host = host_arg(std::env::args().skip(1))?;
+    let idle_timeout = idle_timeout_secs(std::env::args().skip(1))?;
 
     // Bind before announcing the port, and keep this listener for serving:
     // reserving the OS-assigned port here closes the window in which another
@@ -78,20 +104,66 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{handshake}");
     std::io::stdout().flush()?;
 
-    let service = PactPluginServer::new(PactAvroPluginService)
-        .accept_compressed(CompressionEncoding::Gzip)
-        .send_compressed(CompressionEncoding::Gzip);
+    let start = Instant::now();
+    let last_access_secs = Arc::new(AtomicU64::new(0));
+    let touch_last_access = {
+        let last_access_secs = last_access_secs.clone();
+        move |request: tonic::Request<()>| {
+            last_access_secs.store(start.elapsed().as_secs(), Ordering::Relaxed);
+            Ok(request)
+        }
+    };
+    let service = tonic::service::interceptor::InterceptedService::new(
+        PactPluginServer::new(PactAvroPluginService)
+            .accept_compressed(CompressionEncoding::Gzip)
+            .send_compressed(CompressionEncoding::Gzip),
+        touch_last_access,
+    );
+
+    let idle_shutdown = idle_watchdog(last_access_secs, start, idle_timeout);
 
     tonic::transport::Server::builder()
         .layer(TraceLayer::new_for_grpc())
         .add_service(service)
-        .serve_with_incoming_shutdown(TcpListenerStream::new(listener), shutdown_signal())
+        .serve_with_incoming_shutdown(
+            TcpListenerStream::new(listener),
+            shutdown_signal(idle_shutdown),
+        )
         .await?;
 
     Ok(())
 }
 
-async fn shutdown_signal() {
+/// Resolves once `timeout_secs` seconds have elapsed since the last gRPC
+/// request, or since startup if none has occurred yet. Never resolves when
+/// `timeout_secs` is zero — the watchdog is then disabled.
+fn idle_watchdog(
+    last_access_secs: Arc<AtomicU64>,
+    start: Instant,
+    timeout_secs: u64,
+) -> Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+    if timeout_secs == 0 {
+        return Box::pin(std::future::pending());
+    }
+
+    let timeout = Duration::from_secs(timeout_secs);
+    Box::pin(async move {
+        loop {
+            let idle_for = Duration::from_secs(
+                start.elapsed().as_secs() - last_access_secs.load(Ordering::Relaxed),
+            );
+            match timeout.checked_sub(idle_for) {
+                Some(remaining) if !remaining.is_zero() => tokio::time::sleep(remaining).await,
+                _ => {
+                    tracing::warn!("no gRPC activity for {}s, shutting down", timeout.as_secs());
+                    return;
+                }
+            }
+        }
+    })
+}
+
+async fn shutdown_signal(idle: impl std::future::Future<Output = ()>) {
     let ctrl_c = async {
         // Signal-handler registration failing at startup is unrecoverable —
         // without it the process can't shut down cleanly.
@@ -116,12 +188,45 @@ async fn shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => tracing::info!("received Ctrl-C, shutting down"),
         _ = terminate => tracing::info!("received SIGTERM, shutting down"),
+        _ = idle => {}
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn idle_timeout_defaults_when_absent() {
+        assert_eq!(
+            idle_timeout_secs(std::iter::empty()).unwrap(),
+            DEFAULT_IDLE_TIMEOUT_SECS
+        );
+    }
+
+    #[test]
+    fn idle_timeout_parses_the_flag_value() {
+        let args = vec!["--timeout".to_string(), "42".to_string()].into_iter();
+        assert_eq!(idle_timeout_secs(args).unwrap(), 42);
+    }
+
+    #[test]
+    fn idle_timeout_zero_is_accepted_as_disabled() {
+        let args = vec!["--timeout".to_string(), "0".to_string()].into_iter();
+        assert_eq!(idle_timeout_secs(args).unwrap(), 0);
+    }
+
+    #[test]
+    fn idle_timeout_rejects_a_missing_value() {
+        let args = vec!["--timeout".to_string()].into_iter();
+        assert!(idle_timeout_secs(args).is_err());
+    }
+
+    #[test]
+    fn idle_timeout_rejects_a_non_numeric_value() {
+        let args = vec!["--timeout".to_string(), "soon".to_string()].into_iter();
+        assert!(idle_timeout_secs(args).is_err());
+    }
 
     #[test]
     fn host_defaults_when_absent() {
