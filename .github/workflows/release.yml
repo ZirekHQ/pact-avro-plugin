@@ -15,13 +15,9 @@ on:
     secrets:
       PACT_PLUGINS_PR_TOKEN:
         required: false
+  # Build only -- always dry-run. To publish, use prepare-release.yml,
+  # whose `new_tag` input is gated by the "release" environment.
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Build everything, publish nothing"
-        required: false
-        type: boolean
-        default: true
 
 permissions: {}
 
@@ -38,6 +34,7 @@ jobs:
       contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
+      dry_run: ${{ github.event_name == 'workflow_dispatch' || inputs.dry_run == true }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,7 +58,7 @@ jobs:
           fi
           echo "version=${cargo_version}" >> "$GITHUB_OUTPUT"
       - name: Guard against re-releasing
-        if: inputs.dry_run != true
+        if: github.event_name != 'workflow_dispatch' && inputs.dry_run != true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -72,7 +69,7 @@ jobs:
             exit 1
           fi
       - name: Push release tag
-        if: inputs.dry_run != true
+        if: github.event_name != 'workflow_dispatch' && inputs.dry_run != true
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -175,13 +172,13 @@ jobs:
       - name: Check the asset set
         run: test "$(find dist -type f | wc -l)" -eq 15
       - name: Upload dry-run files
-        if: inputs.dry_run == true
+        if: needs.version.outputs.dry_run == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-files
           path: dist/*
       - name: Create release
-        if: inputs.dry_run != true
+        if: needs.version.outputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.version.outputs.version }}
@@ -190,7 +187,7 @@ jobs:
   smoke:
     name: Smoke test the published release
     needs: [version, publish]
-    if: inputs.dry_run != true
+    if: needs.version.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -208,7 +205,7 @@ jobs:
   index-pr:
     name: Open the pact-plugins index pull request
     needs: [version, smoke]
-    if: inputs.dry_run != true
+    if: needs.version.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # The release is already published; a failed upstream PR must not turn the run red.
