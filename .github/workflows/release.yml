@@ -30,6 +30,9 @@ jobs:
       inputs.new_tag != '' ||
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.event.head_commit.message, 'chore: bump version -> ')
+    concurrency:
+      group: release
+      cancel-in-progress: false
     permissions:
       contents: write
     outputs:
@@ -151,6 +154,9 @@ jobs:
     needs: [version, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: release
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -167,7 +173,12 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: bash scripts/render-release-files.sh "$VERSION" dist all
       - name: Check the asset set
-        run: test "$(find dist -type f | wc -l)" -eq 15
+        run: |
+          expected=(pact-plugin.json install-plugin.sh install-plugin.sh.sha256)
+          for asset in linux-x86_64 linux-aarch64 osx-x86_64 osx-aarch64 windows-x86_64.exe windows-aarch64.exe; do
+            expected+=("pact-avro-plugin-${asset}.gz" "pact-avro-plugin-${asset}.gz.sha256")
+          done
+          diff <(printf '%s\n' "${expected[@]}" | sort) <(cd dist && find . -type f -printf '%P\n' | sort)
       - name: Upload dry-run files
         if: needs.version.outputs.dry_run == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
