@@ -305,4 +305,43 @@ mod tests {
         let addr: SocketAddr = "192.168.1.5:1234".parse().unwrap();
         assert!(port_reachable_via_loopback(addr).is_err());
     }
+
+    fn request_with_authorization(value: &str) -> tonic::Request<()> {
+        let mut request = tonic::Request::new(());
+        request.metadata_mut().insert(
+            "authorization",
+            tonic::metadata::MetadataValue::try_from(value).unwrap(),
+        );
+        request
+    }
+
+    #[test]
+    fn accepts_matching_authorization_header() {
+        let server_key = Uuid::new_v4();
+        let intercept = authenticate(server_key);
+
+        assert!(intercept(request_with_authorization(&server_key.to_string())).is_ok());
+    }
+
+    #[test]
+    fn rejects_missing_authorization_header() {
+        let intercept = authenticate(Uuid::new_v4());
+
+        assert_eq!(
+            intercept(tonic::Request::new(())).unwrap_err().code(),
+            tonic::Code::Unauthenticated
+        );
+    }
+
+    #[test]
+    fn rejects_mismatched_authorization_header() {
+        let intercept = authenticate(Uuid::new_v4());
+
+        assert_eq!(
+            intercept(request_with_authorization(&Uuid::new_v4().to_string()))
+                .unwrap_err()
+                .code(),
+            tonic::Code::Unauthenticated
+        );
+    }
 }

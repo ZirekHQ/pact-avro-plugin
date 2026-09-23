@@ -18,6 +18,14 @@ pub struct Handshake {
     pub server_key: String,
 }
 
+/// Kills and reaps `child` before panicking, so a plugin that hangs or sends
+/// a bad handshake can't stay alive and interfere with later tests.
+fn fail_handshake(child: &mut Child, message: &str) -> ! {
+    let _ = child.kill();
+    let _ = child.wait();
+    panic!("{message}");
+}
+
 /// Reads the handshake line on a background thread so a plugin that never
 /// writes one (hangs, crashes without output) can't block the test past
 /// `timeout` — `read_line` alone gives no such bound.
@@ -31,19 +39,20 @@ pub fn read_handshake(child: &mut Child, timeout: Duration) -> Handshake {
     });
     let line = match rx.recv_timeout(timeout) {
         Ok(line) => line,
-        Err(_) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("plugin did not print a handshake in time");
-        }
+        Err(_) => fail_handshake(child, "plugin did not print a handshake in time"),
     };
-    let handshake: serde_json::Value =
-        serde_json::from_str(line.trim()).expect("handshake line was not valid JSON");
+    let handshake: serde_json::Value = match serde_json::from_str(line.trim()) {
+        Ok(handshake) => handshake,
+        Err(_) => fail_handshake(child, "handshake line was not valid JSON"),
+    };
     Handshake {
-        port: handshake["port"].as_u64().expect("handshake missing port") as u16,
+        port: handshake["port"]
+            .as_u64()
+            .unwrap_or_else(|| fail_handshake(child, "handshake missing port"))
+            as u16,
         server_key: handshake["serverKey"]
             .as_str()
-            .expect("handshake missing serverKey")
+            .unwrap_or_else(|| fail_handshake(child, "handshake missing serverKey"))
             .to_string(),
     }
 }
