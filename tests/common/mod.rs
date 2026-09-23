@@ -29,9 +29,14 @@ pub fn read_handshake(child: &mut Child, timeout: Duration) -> Handshake {
         let _ = BufReader::new(stdout).read_line(&mut line);
         let _ = tx.send(line);
     });
-    let line = rx
-        .recv_timeout(timeout)
-        .expect("plugin did not print a handshake in time");
+    let line = match rx.recv_timeout(timeout) {
+        Ok(line) => line,
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("plugin did not print a handshake in time");
+        }
+    };
     let handshake: serde_json::Value =
         serde_json::from_str(line.trim()).expect("handshake line was not valid JSON");
     Handshake {
