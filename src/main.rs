@@ -1,6 +1,7 @@
 use pact_avro_plugin::pact_plugin::pact_plugin_server::PactPluginServer;
 use pact_avro_plugin::service::PactAvroPluginService;
 use std::io::Write;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::codec::CompressionEncoding;
 use tower_http::trace::TraceLayer;
@@ -35,6 +36,18 @@ fn host_arg(args: impl Iterator<Item = String>) -> Result<String, String> {
     Ok(DEFAULT_HOST.to_string())
 }
 
+/// Returns the bound port, or an error if `addr` won't be reachable at
+/// `127.0.0.1` — the address the Pact driver always dials after reading the
+/// handshake (the handshake JSON carries no host field).
+fn port_reachable_via_loopback(addr: SocketAddr) -> Result<u16, String> {
+    match addr.ip() {
+        IpAddr::V4(ip) if ip == Ipv4Addr::LOCALHOST || ip.is_unspecified() => Ok(addr.port()),
+        ip => Err(format!(
+            "--host must resolve to 127.0.0.1 or 0.0.0.0, got {ip}: the Pact driver always connects to 127.0.0.1"
+        )),
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if version_requested() {
@@ -56,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // reserving the OS-assigned port here closes the window in which another
     // process could claim it between lookup and bind.
     let listener = tokio::net::TcpListener::bind((host.as_str(), 0)).await?;
-    let port = listener.local_addr()?.port();
+    let port = port_reachable_via_loopback(listener.local_addr()?)?;
 
     let server_key = Uuid::new_v4();
     // Pact core reads this exact line from stdout to discover how to reach
@@ -131,5 +144,23 @@ mod tests {
     fn host_rejects_a_flag_as_the_value() {
         let args = vec!["--host".to_string(), "--version".to_string()].into_iter();
         assert!(host_arg(args).is_err());
+    }
+
+    #[test]
+    fn port_reachable_via_loopback_accepts_localhost() {
+        let addr: SocketAddr = "127.0.0.1:1234".parse().unwrap();
+        assert_eq!(port_reachable_via_loopback(addr), Ok(1234));
+    }
+
+    #[test]
+    fn port_reachable_via_loopback_accepts_unspecified() {
+        let addr: SocketAddr = "0.0.0.0:1234".parse().unwrap();
+        assert_eq!(port_reachable_via_loopback(addr), Ok(1234));
+    }
+
+    #[test]
+    fn port_reachable_via_loopback_rejects_other_addresses() {
+        let addr: SocketAddr = "192.168.1.5:1234".parse().unwrap();
+        assert!(port_reachable_via_loopback(addr).is_err());
     }
 }
