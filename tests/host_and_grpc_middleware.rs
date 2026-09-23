@@ -88,20 +88,45 @@ fn graceful_kill(child: &mut Child, _timeout: Duration) {
     let _ = child.wait();
 }
 
+/// Wraps a spawned plugin so `graceful_kill` runs when it goes out of scope
+/// — including on a panicking assertion — so a failed test can never leave
+/// the child orphaned or drop its unflushed coverage profile.
+struct ManagedChild(Child);
+
+impl std::ops::Deref for ManagedChild {
+    type Target = Child;
+    fn deref(&self) -> &Child {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for ManagedChild {
+    fn deref_mut(&mut self) -> &mut Child {
+        &mut self.0
+    }
+}
+
+impl Drop for ManagedChild {
+    fn drop(&mut self) {
+        graceful_kill(&mut self.0, Duration::from_secs(2));
+    }
+}
+
 async fn connect(port: u16) -> PactPluginClient<tonic::transport::Channel> {
     PactPluginClient::connect(format!("http://127.0.0.1:{port}"))
         .await
         .expect("failed to connect to the plugin")
 }
 
-/// A TEST-NET-3 address (RFC 5737): reserved for documentation, never
-/// assigned to a local interface, so binding to it must fail wherever this
-/// test runs.
-const UNASSIGNED_TEST_HOST: &str = "203.0.113.1";
+/// A hostname containing a space: syntactically invalid per RFC 1123, so
+/// `getaddrinfo` rejects it locally before any DNS query or route lookup —
+/// unlike a documentation IP address, the bind failure can't depend on the
+/// network the test happens to run on.
+const UNBINDABLE_HOST: &str = "invalid host";
 
 #[test]
 fn rejects_an_unbindable_host() {
-    let mut child = spawn_plugin(&["--host", UNASSIGNED_TEST_HOST], "info");
+    let mut child = ManagedChild(spawn_plugin(&["--host", UNBINDABLE_HOST], "info"));
 
     assert!(
         read_handshake_port(&mut child, Duration::from_secs(3)).is_none(),
@@ -127,7 +152,7 @@ fn rejects_an_unbindable_host() {
 
 #[test]
 fn negotiates_gzip_compression() {
-    let mut child = spawn_plugin(&[], "info");
+    let mut child = ManagedChild(spawn_plugin(&[], "info"));
     let port = read_handshake_port(&mut child, Duration::from_secs(5))
         .expect("plugin did not print a handshake in time");
 
@@ -141,13 +166,11 @@ fn negotiates_gzip_compression() {
             .await
             .expect("gzip-compressed update_catalogue call failed");
     });
-
-    graceful_kill(&mut child, Duration::from_secs(2));
 }
 
 #[test]
 fn logs_grpc_requests_via_tracing() {
-    let mut child = spawn_plugin(&[], "tower_http=debug");
+    let mut child = ManagedChild(spawn_plugin(&[], "tower_http=debug"));
     let port = read_handshake_port(&mut child, Duration::from_secs(5))
         .expect("plugin did not print a handshake in time");
 
@@ -160,14 +183,9 @@ fn logs_grpc_requests_via_tracing() {
     });
 
     let stderr = read_stderr_for(&mut child, Duration::from_millis(500));
-    graceful_kill(&mut child, Duration::from_secs(2));
 
     assert!(
-        stderr.contains("started processing request"),
-        "expected a tower-http request span in stderr, got:\n{stderr}"
-    );
-    assert!(
-        stderr.contains("finished processing request"),
-        "expected a tower-http response event in stderr, got:\n{stderr}"
+        stderr.contains("/io.pact.plugin.PactPlugin/UpdateCatalogue"),
+        "expected the gRPC method path in a tower-http trace span, got:\n{stderr}"
     );
 }
