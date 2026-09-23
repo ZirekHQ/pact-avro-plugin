@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::Notify;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::codec::CompressionEncoding;
 use tower_http::trace::TraceLayer;
@@ -95,20 +96,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let idle_shutdown = idle_watchdog(last_access_millis, start, idle_timeout);
 
+    // Fires once a shutdown trigger is selected, so the grace period below
+    // starts counting from there rather than from process start.
+    let shutdown_triggered = Arc::new(Notify::new());
+    let shutdown = {
+        let shutdown_triggered = shutdown_triggered.clone();
+        async move {
+            shutdown_signal(idle_shutdown).await;
+            shutdown_triggered.notify_one();
+        }
+    };
+
     let serve = tonic::transport::Server::builder()
         .layer(TraceLayer::new_for_grpc())
         .add_service(service)
-        .serve_with_incoming_shutdown(
-            TcpListenerStream::new(listener),
-            shutdown_signal(idle_shutdown),
-        );
+        .serve_with_incoming_shutdown(TcpListenerStream::new(listener), shutdown);
+    tokio::pin!(serve);
 
-    match tokio::time::timeout(SHUTDOWN_GRACE_PERIOD, serve).await {
-        Ok(result) => result?,
-        Err(_) => tracing::warn!(
-            "shutdown grace period ({}s) elapsed with a request still in flight; forcing exit",
-            SHUTDOWN_GRACE_PERIOD.as_secs()
-        ),
+    tokio::select! {
+        result = &mut serve => result?,
+        _ = shutdown_triggered.notified() => {
+            if tokio::time::timeout(SHUTDOWN_GRACE_PERIOD, &mut serve).await.is_err() {
+                tracing::warn!(
+                    "shutdown grace period ({}s) elapsed with a request still in flight; forcing exit",
+                    SHUTDOWN_GRACE_PERIOD.as_secs()
+                );
+            }
+        }
     }
 
     Ok(())
