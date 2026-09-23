@@ -20,6 +20,9 @@ jobs:
     if: inputs.new_tag == ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: release
+      cancel-in-progress: false
     steps:
       - name: Create release App token
         id: app-token
