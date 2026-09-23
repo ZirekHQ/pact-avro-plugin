@@ -161,10 +161,18 @@ fn negotiates_gzip_compression() {
             .await
             .send_compressed(CompressionEncoding::Gzip)
             .accept_compressed(CompressionEncoding::Gzip);
-        client
+        let response = client
             .update_catalogue(Catalogue::default())
             .await
             .expect("gzip-compressed update_catalogue call failed");
+        assert_eq!(
+            response
+                .metadata()
+                .get("grpc-encoding")
+                .and_then(|value| value.to_str().ok()),
+            Some("gzip"),
+            "server response was not gzip-compressed",
+        );
     });
 }
 
