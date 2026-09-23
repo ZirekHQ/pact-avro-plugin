@@ -4,7 +4,8 @@ use apache_avro::schema::{InnerDecimalSchema, Schema, UuidSchema};
 type Rest<'b> = Result<&'b [u8], String>;
 type Entry = (Vec<u8>, Vec<u8>);
 
-/// Rewrites an Avro datum so every map block lists its entries in ascending key order.
+/// Rewrites an Avro datum so each map is a single block with entries in ascending key-byte order.
+/// Fails on data that does not match the schema.
 pub fn sort_map_entries<'a>(
     ctx: &SchemaCtx<'a>,
     schema: &'a Schema,
@@ -68,11 +69,11 @@ fn copy_sized<'b>(input: &'b [u8], out: &mut Vec<u8>) -> Rest<'b> {
     copy(rest, size, out)
 }
 
-fn read_block_count(input: &[u8]) -> Result<(usize, &[u8]), String> {
-    let (count, rest) = read_long(input)?;
-    usize::try_from(count)
-        .map(|count| (count, rest))
-        .map_err(|_| format!("unsupported block count {count}"))
+fn read_block_count(input: &[u8]) -> Result<(i64, &[u8]), String> {
+    match read_long(input)? {
+        (count, _) if count < 0 => Err(format!("unsupported block count {count}")),
+        counted => Ok(counted),
+    }
 }
 
 fn rewrite<'a, 'b>(
@@ -115,7 +116,7 @@ fn rewrite<'a, 'b>(
         Schema::Union(union) => rewrite_union(ctx, union.variants(), input, out),
         Schema::Array(array) => rewrite_array(ctx, &array.items, input, out),
         Schema::Map(map) => rewrite_map(ctx, &map.types, input, out),
-        other => Err(format!("unsupported schema {other:?}")),
+        Schema::Ref { name } => Err(format!("unresolved schema reference {name}")),
     }
 }
 
@@ -143,7 +144,7 @@ fn rewrite_array<'a, 'b>(
     let mut rest = input;
     loop {
         let (count, after_count) = read_block_count(rest)?;
-        write_long(count as i64, out);
+        write_long(count, out);
         if count == 0 {
             return Ok(after_count);
         }
@@ -193,7 +194,9 @@ fn rewrite_map<'a, 'b>(
     let rest = read_entries(ctx, values, input, &mut entries)?;
     entries.sort_by(|left, right| left.0.cmp(&right.0));
     if !entries.is_empty() {
-        write_long(entries.len() as i64, out);
+        let count = i64::try_from(entries.len())
+            .map_err(|_| format!("too many map entries: {}", entries.len()))?;
+        write_long(count, out);
         entries.iter().for_each(|(_, encoded)| out.extend(encoded));
     }
     out.push(0);
@@ -288,6 +291,37 @@ mod tests {
         datum.push(0x00);
         let sorted = sort_map_entries(&ctx, &schema, &datum).unwrap();
         assert_eq!(sorted.len(), 3 + 100_000 * 3 + 1);
+    }
+
+    #[test]
+    fn fixed_and_variable_width_fields_keep_the_following_map_aligned() {
+        let schema = parse_str(
+            r#"{"type":"record","name":"R","fields":[
+                 {"name":"f","type":"float"},{"name":"d","type":"double"},
+                 {"name":"l","type":"long"},
+                 {"name":"e","type":{"type":"enum","name":"E","symbols":["A","B","C"]}},
+                 {"name":"x","type":{"type":"fixed","name":"X","size":3}},
+                 {"name":"b","type":"bytes"},{"name":"s","type":"string"},
+                 {"name":"m","type":{"type":"map","values":["null","string"]}}]}"#,
+        )
+        .unwrap();
+        let ctx = SchemaCtx::new(&schema).unwrap();
+        let prefix: Vec<u8> = [
+            &[1, 2, 3, 4][..],
+            &[5, 6, 7, 8, 9, 10, 11, 12],
+            &[0xd8, 0x04],
+            &[0x04],
+            &[0xaa, 0xbb, 0xcc],
+            &[0x04, 0xde, 0xad],
+            &[0x04, b'h', b'i'],
+        ]
+        .concat();
+        let a = [0x02, b'a', 0x00];
+        let b = [0x02, b'b', 0x02, 0x02, b'x'];
+        let c = [0x02, b'c', 0x02, 0x04, b'y', b'z'];
+        let datum = [&prefix[..], &[0x06], &c[..], &a[..], &b[..], &[0x00]].concat();
+        let expected = [&prefix[..], &[0x06], &a[..], &b[..], &c[..], &[0x00]].concat();
+        assert_eq!(sort_map_entries(&ctx, &schema, &datum).unwrap(), expected);
     }
 
     #[test]

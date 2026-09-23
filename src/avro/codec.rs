@@ -16,7 +16,10 @@ pub fn encode<'a>(
         .and_then(|builder| builder.build())
         .and_then(|writer| writer.write_value_to_vec(value))
         .map_err(|error| error.to_string())
-        .and_then(|bytes| sort_map_entries(ctx, record, &bytes))
+        .and_then(|bytes| {
+            sort_map_entries(ctx, record, &bytes)
+                .map_err(|error| format!("sorting map entries failed: {error}"))
+        })
         .map_err(PluginError::Exception)
 }
 
@@ -110,6 +113,41 @@ mod tests {
             &record_with(r#"{"type":"map","values":"int"}"#),
             int_map,
             &int_map_bytes(),
+        );
+    }
+
+    #[test]
+    fn map_keys_sort_by_utf8_bytes_not_utf16_units_or_length() {
+        let long_key = "z".repeat(64);
+        let unsorted = ["𝄞", "\u{FF5E}", "é", long_key.as_str(), "ab", "a", ""];
+        let sorted: [(&[u8], &str, u8); 7] = [
+            (&[0x00], "", 0x0c),
+            (&[0x02], "a", 0x0a),
+            (&[0x04], "ab", 0x08),
+            (&[0x80, 0x01], long_key.as_str(), 0x06),
+            (&[0x04], "é", 0x04),
+            (&[0x06], "\u{FF5E}", 0x02),
+            (&[0x08], "𝄞", 0x00),
+        ];
+        let mut expected = vec![0x0e];
+        sorted.iter().for_each(|(length, key, value)| {
+            expected.extend(*length);
+            expected.extend(key.as_bytes());
+            expected.push(*value);
+        });
+        expected.push(0);
+        assert_encodes_to(
+            &record_with(r#"{"type":"map","values":"int"}"#),
+            || {
+                Value::Map(
+                    unsorted
+                        .iter()
+                        .enumerate()
+                        .map(|(i, key)| (key.to_string(), Value::Int(i as i32)))
+                        .collect(),
+                )
+            },
+            &expected,
         );
     }
 
