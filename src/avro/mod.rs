@@ -1,6 +1,7 @@
 pub mod codec;
 pub mod compare;
 pub mod json;
+pub mod map_order;
 pub mod node;
 pub mod path;
 pub mod record;
