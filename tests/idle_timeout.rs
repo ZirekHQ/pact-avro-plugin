@@ -66,21 +66,33 @@ fn shuts_down_after_the_configured_idle_timeout() {
 
 #[test]
 fn grpc_activity_resets_the_idle_clock() {
-    // timeout=3s, reset triggered at ~1s: the original (un-reset) deadline is
-    // ~3s and the reset deadline is ~4s, leaving a 500ms margin on both sides
-    // of the t=3.5s check below to absorb CI scheduling jitter.
-    let mut child = spawn_plugin("3");
+    // timeout=4s, reset triggered at ~2s: the original (un-reset) deadline is
+    // ~4s and the reset deadline is ~6s. Checkpoints are anchored to
+    // `started_at` rather than accumulated sleeps, so RPC/connect latency
+    // can't eat into the margin on either side.
+    let mut child = spawn_plugin("4");
     let port = read_handshake_port(&mut child, Duration::from_secs(5));
+    let started_at = Instant::now();
 
-    std::thread::sleep(Duration::from_millis(1000));
+    let request_at = started_at + Duration::from_secs(2);
+    while Instant::now() < request_at {
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "plugin shut down before the gRPC activity request"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
     send_update_catalogue(port);
 
-    std::thread::sleep(Duration::from_millis(2500));
-    assert!(
-        child.try_wait().unwrap().is_none(),
-        "plugin shut down even though the gRPC request at ~1s should have reset its 3s idle \
-         clock, keeping it alive past the original, un-reset deadline at ~3s"
-    );
+    let check_at = started_at + Duration::from_secs(5);
+    while Instant::now() < check_at {
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "plugin shut down even though the gRPC request at ~2s should have reset its 4s idle \
+             clock, keeping it alive past the original, un-reset deadline at ~4s"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
 
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {

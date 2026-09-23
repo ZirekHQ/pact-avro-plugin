@@ -1,3 +1,4 @@
+use clap::Parser;
 use pact_avro_plugin::pact_plugin::pact_plugin_server::PactPluginServer;
 use pact_avro_plugin::service::PactAvroPluginService;
 use std::io::Write;
@@ -14,31 +15,31 @@ use uuid::Uuid;
 const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 600;
 
+/// Bounds how long `main` waits for in-flight requests to finish once any
+/// shutdown trigger (idle timeout, Ctrl-C, SIGTERM) fires. Without this,
+/// `serve_with_incoming_shutdown` can wait indefinitely for a connection
+/// that never closes.
+const SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(5);
+
 fn version_requested() -> bool {
     std::env::args().nth(1).as_deref() == Some("--version")
 }
 
-/// Reads `--host <address>` from the CLI args, defaulting to
-/// [`DEFAULT_HOST`] when absent. Returns an error if `--host` is given
-/// without a value, or if the next token is itself a flag.
-fn host_arg(args: impl Iterator<Item = String>) -> Result<String, String> {
-    let mut args = args;
-    while let Some(arg) = args.next() {
-        if arg != "--host" {
-            continue;
-        }
-        let value = args
-            .next()
-            .ok_or_else(|| "--host requires a value".to_string())?;
-        return if value.starts_with("--") {
-            Err(format!(
-                "--host requires an address value, got flag `{value}`"
-            ))
-        } else {
-            Ok(value)
-        };
-    }
-    Ok(DEFAULT_HOST.to_string())
+/// Command-line arguments accepted by the plugin binary. `--version` is
+/// handled separately by [`version_requested`] before this ever parses, so
+/// clap's own version flag stays off to avoid a conflicting output format.
+#[derive(Parser)]
+#[command(disable_version_flag = true)]
+struct Cli {
+    /// Seconds of gRPC inactivity before the plugin shuts itself down.
+    /// `0` disables the idle watchdog.
+    #[arg(long, default_value_t = DEFAULT_IDLE_TIMEOUT_SECS)]
+    timeout: u64,
+
+    /// Address to bind the gRPC listener to; must resolve to loopback or
+    /// unspecified, since the Pact driver always dials 127.0.0.1.
+    #[arg(long, default_value = DEFAULT_HOST)]
+    host: String,
 }
 
 /// Returns the bound port, or an error if `addr` won't be reachable at
@@ -51,26 +52,6 @@ fn port_reachable_via_loopback(addr: SocketAddr) -> Result<u16, String> {
             "--host must resolve to 127.0.0.1 or 0.0.0.0, got {ip}: the Pact driver always connects to 127.0.0.1"
         )),
     }
-}
-
-/// Reads `--timeout <seconds>` from the CLI args, defaulting to
-/// [`DEFAULT_IDLE_TIMEOUT_SECS`] when absent. A value of `0` disables the
-/// idle watchdog. Returns an error if `--timeout` is given without a value
-/// or with a non-numeric value.
-fn idle_timeout_secs(args: impl Iterator<Item = String>) -> Result<u64, String> {
-    let mut args = args;
-    while let Some(arg) = args.next() {
-        if arg != "--timeout" {
-            continue;
-        }
-        let value = args
-            .next()
-            .ok_or_else(|| "--timeout requires a value".to_string())?;
-        return value
-            .parse::<u64>()
-            .map_err(|_| format!("--timeout value must be a non-negative integer, got '{value}'"));
-    }
-    Ok(DEFAULT_IDLE_TIMEOUT_SECS)
 }
 
 #[tokio::main]
@@ -88,8 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    let host = host_arg(std::env::args().skip(1))?;
-    let idle_timeout = idle_timeout_secs(std::env::args().skip(1))?;
+    let cli = Cli::parse();
+    let (host, idle_timeout) = (cli.host, cli.timeout);
 
     let (listener, port) = bind_ephemeral_port(&host).await?;
 
@@ -114,14 +95,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let idle_shutdown = idle_watchdog(last_access_millis, start, idle_timeout);
 
-    tonic::transport::Server::builder()
+    let serve = tonic::transport::Server::builder()
         .layer(TraceLayer::new_for_grpc())
         .add_service(service)
         .serve_with_incoming_shutdown(
             TcpListenerStream::new(listener),
             shutdown_signal(idle_shutdown),
-        )
-        .await?;
+        );
+
+    match tokio::time::timeout(SHUTDOWN_GRACE_PERIOD, serve).await {
+        Ok(result) => result?,
+        Err(_) => tracing::warn!(
+            "shutdown grace period ({}s) elapsed with a request still in flight; forcing exit",
+            SHUTDOWN_GRACE_PERIOD.as_secs()
+        ),
+    }
 
     Ok(())
 }
@@ -205,7 +193,7 @@ async fn shutdown_signal(idle: impl std::future::Future<Output = ()>) {
     tokio::select! {
         _ = ctrl_c => tracing::info!("received Ctrl-C, shutting down"),
         _ = terminate => tracing::info!("received SIGTERM, shutting down"),
-        _ = idle => {}
+        _ = idle => tracing::info!("idle timeout elapsed, shutting down"),
     }
 }
 
@@ -216,56 +204,55 @@ mod tests {
     #[test]
     fn idle_timeout_defaults_when_absent() {
         assert_eq!(
-            idle_timeout_secs(std::iter::empty()).unwrap(),
+            Cli::try_parse_from(["pact-avro-plugin"]).unwrap().timeout,
             DEFAULT_IDLE_TIMEOUT_SECS
         );
     }
 
     #[test]
     fn idle_timeout_parses_the_flag_value() {
-        let args = vec!["--timeout".to_string(), "42".to_string()].into_iter();
-        assert_eq!(idle_timeout_secs(args).unwrap(), 42);
+        let cli = Cli::try_parse_from(["pact-avro-plugin", "--timeout", "42"]).unwrap();
+        assert_eq!(cli.timeout, 42);
     }
 
     #[test]
     fn idle_timeout_zero_is_accepted_as_disabled() {
-        let args = vec!["--timeout".to_string(), "0".to_string()].into_iter();
-        assert_eq!(idle_timeout_secs(args).unwrap(), 0);
+        let cli = Cli::try_parse_from(["pact-avro-plugin", "--timeout", "0"]).unwrap();
+        assert_eq!(cli.timeout, 0);
     }
 
     #[test]
     fn idle_timeout_rejects_a_missing_value() {
-        let args = vec!["--timeout".to_string()].into_iter();
-        assert!(idle_timeout_secs(args).is_err());
+        assert!(Cli::try_parse_from(["pact-avro-plugin", "--timeout"]).is_err());
     }
 
     #[test]
     fn idle_timeout_rejects_a_non_numeric_value() {
-        let args = vec!["--timeout".to_string(), "soon".to_string()].into_iter();
-        assert!(idle_timeout_secs(args).is_err());
+        assert!(Cli::try_parse_from(["pact-avro-plugin", "--timeout", "soon"]).is_err());
     }
 
     #[test]
     fn host_defaults_when_absent() {
-        assert_eq!(host_arg(std::iter::empty()).unwrap(), DEFAULT_HOST);
+        assert_eq!(
+            Cli::try_parse_from(["pact-avro-plugin"]).unwrap().host,
+            DEFAULT_HOST
+        );
     }
 
     #[test]
     fn host_parses_the_flag_value() {
-        let args = vec!["--host".to_string(), "0.0.0.0".to_string()].into_iter();
-        assert_eq!(host_arg(args).unwrap(), "0.0.0.0");
+        let cli = Cli::try_parse_from(["pact-avro-plugin", "--host", "0.0.0.0"]).unwrap();
+        assert_eq!(cli.host, "0.0.0.0");
     }
 
     #[test]
     fn host_rejects_a_missing_value() {
-        let args = vec!["--host".to_string()].into_iter();
-        assert!(host_arg(args).is_err());
+        assert!(Cli::try_parse_from(["pact-avro-plugin", "--host"]).is_err());
     }
 
     #[test]
     fn host_rejects_a_flag_as_the_value() {
-        let args = vec!["--host".to_string(), "--version".to_string()].into_iter();
-        assert!(host_arg(args).is_err());
+        assert!(Cli::try_parse_from(["pact-avro-plugin", "--host", "--version"]).is_err());
     }
 
     #[test]
