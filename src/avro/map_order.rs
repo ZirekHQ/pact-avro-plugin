@@ -1,5 +1,5 @@
 use crate::avro::schema::SchemaCtx;
-use apache_avro::schema::Schema;
+use apache_avro::schema::{InnerDecimalSchema, Schema, UuidSchema};
 
 type Rest<'b> = Result<&'b [u8], String>;
 type Entry = (Vec<u8>, Vec<u8>);
@@ -11,27 +11,31 @@ pub fn sort_map_entries<'a>(
     datum: &[u8],
 ) -> Result<Vec<u8>, String> {
     let mut out = Vec::with_capacity(datum.len());
-    rewrite(ctx, schema, datum, &mut out).map(|_| out)
+    match rewrite(ctx, schema, datum, &mut out)? {
+        [] => Ok(out),
+        rest => Err(format!("{} trailing bytes after avro datum", rest.len())),
+    }
 }
 
 fn read_long(input: &[u8]) -> Result<(i64, &[u8]), String> {
-    input
+    let last = input
         .iter()
         .take(10)
         .position(|byte| byte & 0x80 == 0)
-        .map(|last| {
-            let raw = input[..=last]
-                .iter()
-                .enumerate()
-                .fold(0u64, |acc, (i, byte)| {
-                    acc | u64::from(byte & 0x7f) << (7 * i)
-                });
-            (
-                ((raw >> 1) as i64) ^ -((raw & 1) as i64),
-                &input[last + 1..],
-            )
-        })
-        .ok_or_else(|| "truncated variable-length integer".to_string())
+        .ok_or_else(|| "truncated variable-length integer".to_string())?;
+    if last == 9 && input[9] > 1 {
+        return Err("variable-length integer exceeds 64 bits".to_string());
+    }
+    let raw = input[..=last]
+        .iter()
+        .enumerate()
+        .fold(0u64, |acc, (i, byte)| {
+            acc | u64::from(byte & 0x7f) << (7 * i)
+        });
+    Ok((
+        ((raw >> 1) as i64) ^ -((raw & 1) as i64),
+        &input[last + 1..],
+    ))
 }
 
 fn write_long(value: i64, out: &mut Vec<u8>) {
@@ -82,9 +86,28 @@ fn rewrite<'a, 'b>(
         Schema::Boolean => copy(input, 1, out),
         Schema::Float => copy(input, 4, out),
         Schema::Double => copy(input, 8, out),
-        Schema::Fixed(fixed) => copy(input, fixed.size, out),
-        Schema::Int | Schema::Long | Schema::Enum(_) => copy_long(input, out),
-        Schema::Bytes | Schema::String => copy_sized(input, out),
+        Schema::Fixed(fixed) | Schema::Duration(fixed) => copy(input, fixed.size, out),
+        Schema::Decimal(decimal) => match &decimal.inner {
+            InnerDecimalSchema::Bytes => copy_sized(input, out),
+            InnerDecimalSchema::Fixed(fixed) => copy(input, fixed.size, out),
+        },
+        Schema::Uuid(UuidSchema::Fixed(fixed)) => copy(input, fixed.size, out),
+        Schema::Int
+        | Schema::Long
+        | Schema::Enum(_)
+        | Schema::Date
+        | Schema::TimeMillis
+        | Schema::TimeMicros
+        | Schema::TimestampMillis
+        | Schema::TimestampMicros
+        | Schema::TimestampNanos
+        | Schema::LocalTimestampMillis
+        | Schema::LocalTimestampMicros
+        | Schema::LocalTimestampNanos => copy_long(input, out),
+        Schema::Bytes
+        | Schema::String
+        | Schema::BigDecimal
+        | Schema::Uuid(UuidSchema::Bytes | UuidSchema::String) => copy_sized(input, out),
         Schema::Record(record) => record
             .fields
             .iter()
@@ -117,13 +140,14 @@ fn rewrite_array<'a, 'b>(
     input: &'b [u8],
     out: &mut Vec<u8>,
 ) -> Rest<'b> {
-    let (count, rest) = read_block_count(input)?;
-    write_long(count as i64, out);
-    match count {
-        0 => Ok(rest),
-        _ => (0..count)
-            .try_fold(rest, |rest, _| rewrite(ctx, items, rest, out))
-            .and_then(|rest| rewrite_array(ctx, items, rest, out)),
+    let mut rest = input;
+    loop {
+        let (count, after_count) = read_block_count(rest)?;
+        write_long(count as i64, out);
+        if count == 0 {
+            return Ok(after_count);
+        }
+        rest = (0..count).try_fold(after_count, |rest, _| rewrite(ctx, items, rest, out))?;
     }
 }
 
@@ -147,12 +171,15 @@ fn read_entries<'a, 'b>(
     input: &'b [u8],
     entries: &mut Vec<Entry>,
 ) -> Rest<'b> {
-    let (count, rest) = read_block_count(input)?;
-    match count {
-        0 => Ok(rest),
-        _ => (0..count)
-            .try_fold(rest, |rest, _| read_entry(ctx, values, rest, entries))
-            .and_then(|rest| read_entries(ctx, values, rest, entries)),
+    let mut rest = input;
+    loop {
+        let (count, after_count) = read_block_count(rest)?;
+        if count == 0 {
+            return Ok(after_count);
+        }
+        rest = (0..count).try_fold(after_count, |rest, _| {
+            read_entry(ctx, values, rest, entries)
+        })?;
     }
 }
 
@@ -226,5 +253,106 @@ mod tests {
         let schema = map_schema();
         let ctx = SchemaCtx::new(&schema).unwrap();
         assert!(sort_map_entries(&ctx, &schema, &[0x01, 0x00, 0x00]).is_err());
+    }
+
+    #[test]
+    fn bytes_after_the_datum_are_an_error() {
+        let schema = map_schema();
+        let ctx = SchemaCtx::new(&schema).unwrap();
+        assert_eq!(
+            sort_map_entries(&ctx, &schema, &[0x00, 0x07]).unwrap_err(),
+            "1 trailing bytes after avro datum"
+        );
+    }
+
+    #[test]
+    fn varints_wider_than_64_bits_are_an_error() {
+        let overflowing = [[0x80; 9].as_slice(), &[0x02]].concat();
+        assert!(read_long(&overflowing).is_err());
+    }
+
+    #[test]
+    fn arrays_with_many_blocks_do_not_exhaust_the_stack() {
+        let schema = parse_str(r#"{"type":"array","items":"int"}"#).unwrap();
+        let ctx = SchemaCtx::new(&schema).unwrap();
+        let mut datum = [0x02, 0x00].repeat(100_000);
+        datum.push(0x00);
+        assert_eq!(sort_map_entries(&ctx, &schema, &datum).unwrap(), datum);
+    }
+
+    #[test]
+    fn maps_with_many_blocks_do_not_exhaust_the_stack() {
+        let schema = map_schema();
+        let ctx = SchemaCtx::new(&schema).unwrap();
+        let mut datum = [0x02, 0x02, b'a', 0x00].repeat(100_000);
+        datum.push(0x00);
+        let sorted = sort_map_entries(&ctx, &schema, &datum).unwrap();
+        assert_eq!(sorted.len(), 3 + 100_000 * 3 + 1);
+    }
+
+    #[test]
+    fn logical_type_schemas_pass_through_their_underlying_encoding() {
+        let cases: [(&str, Vec<u8>); 15] = [
+            (r#"{"type":"int","logicalType":"date"}"#, vec![0x02]),
+            (r#"{"type":"int","logicalType":"time-millis"}"#, vec![0x02]),
+            (r#"{"type":"long","logicalType":"time-micros"}"#, vec![0x02]),
+            (
+                r#"{"type":"long","logicalType":"timestamp-millis"}"#,
+                vec![0x02],
+            ),
+            (
+                r#"{"type":"long","logicalType":"timestamp-micros"}"#,
+                vec![0x02],
+            ),
+            (
+                r#"{"type":"long","logicalType":"timestamp-nanos"}"#,
+                vec![0x02],
+            ),
+            (
+                r#"{"type":"long","logicalType":"local-timestamp-millis"}"#,
+                vec![0x02],
+            ),
+            (
+                r#"{"type":"long","logicalType":"local-timestamp-micros"}"#,
+                vec![0x02],
+            ),
+            (
+                r#"{"type":"long","logicalType":"local-timestamp-nanos"}"#,
+                vec![0x02],
+            ),
+            (
+                r#"{"type":"string","logicalType":"uuid"}"#,
+                vec![0x02, b'a'],
+            ),
+            (
+                r#"{"type":"bytes","logicalType":"big-decimal"}"#,
+                vec![0x02, 0x05],
+            ),
+            (
+                r#"{"type":"bytes","logicalType":"decimal","precision":4,"scale":2}"#,
+                vec![0x02, 0x05],
+            ),
+            (
+                r#"{"type":"fixed","name":"D","size":2,"logicalType":"decimal","precision":4,"scale":2}"#,
+                vec![7; 2],
+            ),
+            (
+                r#"{"type":"fixed","name":"Dur","size":12,"logicalType":"duration"}"#,
+                vec![7; 12],
+            ),
+            (
+                r#"{"type":"fixed","name":"U","size":16,"logicalType":"uuid"}"#,
+                vec![7; 16],
+            ),
+        ];
+        cases.iter().for_each(|(json, datum)| {
+            let schema = Schema::parse_str(json).unwrap();
+            let ctx = SchemaCtx::new(&schema).unwrap();
+            assert_eq!(
+                sort_map_entries(&ctx, &schema, datum).as_ref(),
+                Ok(datum),
+                "{json}"
+            );
+        });
     }
 }
