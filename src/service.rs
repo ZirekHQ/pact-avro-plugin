@@ -6,7 +6,7 @@ use crate::pact_plugin::{
     catalogue_entry, Catalogue, CatalogueEntry, CompareContentsRequest, CompareContentsResponse,
     ConfigureInteractionRequest, ConfigureInteractionResponse, GenerateContentRequest,
     GenerateContentResponse, InitPluginRequest, InitPluginResponse, MockServerRequest,
-    MockServerResults, ShutdownMockServerRequest, ShutdownMockServerResponse,
+    MockServerResults, PluginConfiguration, ShutdownMockServerRequest, ShutdownMockServerResponse,
     StartMockServerRequest, StartMockServerResponse, VerificationPreparationRequest,
     VerificationPreparationResponse, VerifyInteractionRequest, VerifyInteractionResponse,
 };
@@ -65,8 +65,8 @@ fn configure(
     crate::interaction::build(config, &schema, &record_name)
 }
 
-fn schema_text(request: &CompareContentsRequest) -> Result<String, PluginError> {
-    let configuration = request.plugin_configuration.clone().unwrap_or_default();
+fn schema_text(configuration: Option<&PluginConfiguration>) -> Result<String, PluginError> {
+    let configuration = configuration.cloned().unwrap_or_default();
     let interaction = required(
         &configuration.interaction_configuration,
         "Interaction configuration not found",
@@ -97,8 +97,13 @@ fn schema_text(request: &CompareContentsRequest) -> Result<String, PluginError> 
 }
 
 fn compare(request: &CompareContentsRequest) -> Result<CompareContentsResponse, PluginError> {
-    let schema = parse_str(&schema_text(request)?)?;
+    let schema = parse_str(&schema_text(request.plugin_configuration.as_ref())?)?;
     crate::compare::build(request, &schema)
+}
+
+fn generate(request: &GenerateContentRequest) -> Result<GenerateContentResponse, PluginError> {
+    let schema = parse_str(&schema_text(request.plugin_configuration.as_ref())?)?;
+    crate::generate::build(request, &schema)
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -165,11 +170,13 @@ impl PactPlugin for PactAvroPluginService {
 
     async fn generate_content(
         &self,
-        _request: Request<GenerateContentRequest>,
+        request: Request<GenerateContentRequest>,
     ) -> Result<Response<GenerateContentResponse>, Status> {
-        Err(Status::unimplemented(
-            "Method io.pact.plugin.PactPlugin.GenerateContent is unimplemented",
-        ))
+        let response = generate(&request.into_inner()).map_err(|error| {
+            tracing::error!("Generate content failed: {error}");
+            Status::invalid_argument(error.to_string())
+        })?;
+        Ok(Response::new(response))
     }
 
     async fn start_mock_server(
@@ -212,6 +219,7 @@ impl PactPlugin for PactAvroPluginService {
 mod tests {
     use super::*;
     use crate::pact_plugin::pact_plugin_server::PactPlugin;
+    use crate::pact_plugin::{Body, Generator};
     use tonic::Request;
 
     #[tokio::test]
@@ -240,18 +248,71 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn generate_content_is_unimplemented() {
+    async fn generate_content_applies_a_random_int_generator() {
+        let schema_str =
+            r#"{"type":"record","name":"Item","fields":[{"name":"id","type":"long"}]}"#;
+        let schema = crate::avro::schema::parse_str(schema_str).unwrap();
+        let ctx = crate::avro::schema::SchemaCtx::new(&schema).unwrap();
+        let value = apache_avro::types::Value::Record(vec![(
+            "id".into(),
+            apache_avro::types::Value::Long(1),
+        )]);
+        let content = crate::avro::codec::encode(&ctx, &schema, value).unwrap();
+        let mut generators = HashMap::new();
+        generators.insert(
+            "$.id".to_string(),
+            Generator {
+                r#type: "RandomInt".to_string(),
+                values: Some(crate::proto_json::json_object_to_struct(
+                    serde_json::json!({"min": 42, "max": 42})
+                        .as_object()
+                        .unwrap(),
+                )),
+            },
+        );
+
+        let schema_text = schema_str.to_string();
+        let hash = crate::avro::schema_hash::base16_hash(&schema_text);
+        let plugin_configuration = Some(crate::pact_plugin::PluginConfiguration {
+            interaction_configuration: Some(crate::proto_json::json_object_to_struct(
+                serde_json::json!({"record": "Item", "schemaKey": hash})
+                    .as_object()
+                    .unwrap(),
+            )),
+            pact_configuration: Some(crate::proto_json::json_object_to_struct(
+                serde_json::json!({hash.clone(): {"avroSchema": schema_text}})
+                    .as_object()
+                    .unwrap(),
+            )),
+        });
+
         let service = PactAvroPluginService;
-        let err = service
+        let response = service
             .generate_content(Request::new(GenerateContentRequest {
-                contents: None,
-                generators: Default::default(),
-                plugin_configuration: None,
+                contents: Some(Body {
+                    content_type: "avro/binary;record=Item".to_string(),
+                    content: Some(content),
+                    content_type_hint: 0,
+                }),
+                generators,
+                plugin_configuration,
                 ..Default::default()
             }))
             .await
-            .expect_err("GenerateContent must return an error");
-        assert_eq!(err.code(), tonic::Code::Unimplemented);
+            .expect("GenerateContent must succeed")
+            .into_inner();
+
+        let decode_schema = crate::avro::schema::parse_str(schema_str).unwrap();
+        let ctx = crate::avro::schema::SchemaCtx::new(&decode_schema).unwrap();
+        let apache_avro::types::Value::Record(fields) = crate::avro::codec::decode(
+            &ctx,
+            &decode_schema,
+            response.contents.unwrap().content.as_deref().unwrap(),
+        )
+        .unwrap() else {
+            panic!("record expected")
+        };
+        assert_eq!(fields[0].1, apache_avro::types::Value::Long(42));
     }
 
     fn assert_not_a_transport_plugin_error(err: tonic::Status) {
@@ -313,5 +374,25 @@ mod tests {
             .await
             .expect_err("VerifyInteraction must return an error");
         assert_not_a_transport_plugin_error(err);
+    }
+
+    #[tokio::test]
+    async fn generate_content_reports_a_missing_schema_configuration_clearly() {
+        let service = PactAvroPluginService;
+        let error = service
+            .generate_content(Request::new(GenerateContentRequest {
+                contents: Some(Body {
+                    content_type: "avro/binary;record=Item".to_string(),
+                    content: Some(vec![]),
+                    content_type_hint: 0,
+                }),
+                generators: HashMap::new(),
+                plugin_configuration: None,
+                ..Default::default()
+            }))
+            .await
+            .expect_err("GenerateContent must fail without a schema configuration");
+        assert_eq!(error.code(), tonic::Code::InvalidArgument);
+        assert_eq!(error.message(), "Interaction configuration not found");
     }
 }

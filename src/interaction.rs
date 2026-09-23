@@ -1,7 +1,7 @@
 use crate::avro::codec::encode;
 use crate::avro::node::{to_value, Node};
 use crate::avro::record::RecordBuilder;
-use crate::avro::rules::rule_to_proto;
+use crate::avro::rules::{generator_to_proto, rule_to_proto};
 use crate::avro::schema::SchemaCtx;
 use crate::avro::schema_hash::base16_hash;
 use crate::constants::{AVRO_SCHEMA, RECORD, SCHEMA_KEY};
@@ -64,6 +64,13 @@ fn rules_of(node: &Node) -> HashMap<String, MatchingRules> {
         .collect()
 }
 
+fn generators_of(node: &Node) -> HashMap<String, crate::pact_plugin::Generator> {
+    node.generators_by_path()
+        .into_iter()
+        .filter_map(|(path, generator)| generator.map(|g| (path, generator_to_proto(&g))))
+        .collect()
+}
+
 fn interaction_response(
     record_name: &str,
     hash: &str,
@@ -77,6 +84,7 @@ fn interaction_response(
             content_type_hint: ContentTypeHint::Binary as i32,
         }),
         rules: rules_of(node),
+        generators: generators_of(node),
         plugin_configuration: Some(PluginConfiguration {
             interaction_configuration: Some(struct_of(vec![
                 (RECORD, text_value(record_name)),
@@ -152,6 +160,34 @@ mod tests {
         expected.push(0x52);
         assert_eq!(body.content.as_deref(), Some(expected.as_slice()));
         assert_eq!(interaction.rules.len(), 2);
+    }
+
+    #[test]
+    fn a_provider_state_expression_populates_the_generators_map() {
+        let response = build(
+            &config(json!({
+                "name": "notEmpty(fromProviderState('exp', 'x'))",
+                "id": "notEmpty('41')"
+            })),
+            &item_schema(),
+            "Item",
+        )
+        .unwrap();
+        let interaction = &response.interaction[0];
+        assert_eq!(interaction.generators.len(), 1);
+        let generator = &interaction.generators["$.name"];
+        assert_eq!(generator.r#type, "ProviderState");
+    }
+
+    #[test]
+    fn a_record_with_no_generators_has_an_empty_generators_map() {
+        let response = build(
+            &config(json!({"name": "notEmpty('a')", "id": "notEmpty('1')"})),
+            &item_schema(),
+            "Item",
+        )
+        .unwrap();
+        assert!(response.interaction[0].generators.is_empty());
     }
 
     #[test]

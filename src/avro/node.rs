@@ -24,6 +24,7 @@ pub enum Node {
         path: PactFieldPath,
         value: Scalar,
         rules: Vec<MatchingRule>,
+        generator: Option<pact_models::generators::Generator>,
     },
     Array {
         path: PactFieldPath,
@@ -40,6 +41,7 @@ pub enum Node {
 }
 
 type Rules = BTreeMap<String, Vec<MatchingRule>>;
+type Generators = BTreeMap<String, Option<pact_models::generators::Generator>>;
 
 impl Node {
     pub fn null_leaf(path: PactFieldPath) -> Node {
@@ -47,15 +49,22 @@ impl Node {
             path,
             value: Scalar::Null,
             rules: vec![],
+            generator: None,
         }
     }
 
     pub fn with_path(self, new_path: PactFieldPath) -> Node {
         match self {
-            Node::Leaf { value, rules, .. } => Node::Leaf {
+            Node::Leaf {
+                value,
+                rules,
+                generator,
+                ..
+            } => Node::Leaf {
                 path: new_path,
                 value,
                 rules,
+                generator,
             },
             Node::Array { items, .. } => Node::Array {
                 path: new_path,
@@ -90,6 +99,31 @@ impl Node {
             Node::Record { fields, .. } => fields
                 .values()
                 .for_each(|node| node.collect_rules(collected)),
+        }
+    }
+
+    pub fn generators_by_path(&self) -> Generators {
+        let mut collected = Generators::new();
+        self.collect_generators(&mut collected);
+        collected
+    }
+
+    fn collect_generators(&self, collected: &mut Generators) {
+        match self {
+            Node::Leaf {
+                path, generator, ..
+            } => {
+                collected.insert(path.to_json_path(), generator.clone());
+            }
+            Node::Array { items, .. } => items
+                .iter()
+                .for_each(|item| item.collect_generators(collected)),
+            Node::Map { entries, .. } => entries
+                .values()
+                .for_each(|node| node.collect_generators(collected)),
+            Node::Record { fields, .. } => fields
+                .values()
+                .for_each(|node| node.collect_generators(collected)),
         }
     }
 }
@@ -213,6 +247,7 @@ mod tests {
             path: path(dotted),
             value,
             rules,
+            generator: None,
         }
     }
 
@@ -224,6 +259,29 @@ mod tests {
                 .map(|(n, v)| (n.to_string(), v))
                 .collect(),
         }
+    }
+
+    #[test]
+    fn generators_by_path_carries_one_generator_per_leaf() {
+        use pact_models::generators::Generator;
+        let node = record_node(vec![
+            (
+                "a",
+                Node::Leaf {
+                    path: path("$.a"),
+                    value: Scalar::Int(1),
+                    rules: vec![],
+                    generator: Some(Generator::RandomInt(1, 10)),
+                },
+            ),
+            ("b", leaf("$.b", Scalar::Null, vec![])),
+        ]);
+        let generators = node.generators_by_path();
+        assert_eq!(
+            generators.get("$.a"),
+            Some(&Some(Generator::RandomInt(1, 10)))
+        );
+        assert_eq!(generators.get("$.b"), Some(&None));
     }
 
     #[test]
