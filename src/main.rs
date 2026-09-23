@@ -14,16 +14,23 @@ fn version_requested() -> bool {
 
 /// Reads `--host <address>` from the CLI args, defaulting to
 /// [`DEFAULT_HOST`] when absent. Returns an error if `--host` is given
-/// without a value.
+/// without a value, or if the next token is itself a flag.
 fn host_arg(args: impl Iterator<Item = String>) -> Result<String, String> {
     let mut args = args;
     while let Some(arg) = args.next() {
         if arg != "--host" {
             continue;
         }
-        return args
+        let value = args
             .next()
-            .ok_or_else(|| "--host requires a value".to_string());
+            .ok_or_else(|| "--host requires a value".to_string())?;
+        return if value.starts_with("--") {
+            Err(format!(
+                "--host requires an address value, got flag `{value}`"
+            ))
+        } else {
+            Ok(value)
+        };
     }
     Ok(DEFAULT_HOST.to_string())
 }
@@ -117,6 +124,12 @@ mod tests {
     #[test]
     fn host_rejects_a_missing_value() {
         let args = vec!["--host".to_string()].into_iter();
+        assert!(host_arg(args).is_err());
+    }
+
+    #[test]
+    fn host_rejects_a_flag_as_the_value() {
+        let args = vec!["--host".to_string(), "--version".to_string()].into_iter();
         assert!(host_arg(args).is_err());
     }
 }
