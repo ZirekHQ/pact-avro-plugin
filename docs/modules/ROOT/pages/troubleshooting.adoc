@@ -56,6 +56,9 @@ If a response says `Multiple errors detected and logged, please check logs`, the
 
 |`'<value>' is not a valid matching rule definition - <detail>` / `Rule '<rule>' not supported for now`
 |The string given for a field is not a valid https://github.com/pact-foundation/pact-plugins/blob/main/docs/matching-rule-definition-expressions.md[Matching Rule definition expression], or uses a rule type this plugin does not implement yet. Compare against the working examples in xref:testing.adoc[].
+
+|`missing or invalid authorization header`
+|Every gRPC call to the plugin must carry the `serverKey` printed in its handshake line as the `authorization` header, matching the reference Pact plugin protocol. This should never surface through the standard Pact plugin driver, which handles the handshake automatically; seeing it points at a custom or non-conforming plugin client.
 |===
 
 == FAQ
