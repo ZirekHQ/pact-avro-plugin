@@ -21,6 +21,19 @@ on:
 
 permissions: {}
 
+# A group queues one pending run and drops older ones, so pushes that release nothing
+# take a per-run group instead of displacing a queued release. Keep the condition in
+# sync with the `if` of the version job.
+concurrency:
+  group: >-
+    ${{
+      github.event_name == 'push' &&
+      !startsWith(github.event.head_commit.message, 'chore: bump version -> ') &&
+      format('release-noop-{0}', github.run_id) ||
+      'release'
+    }}
+  cancel-in-progress: false
+
 jobs:
   version:
     name: Resolve version and tag
@@ -30,9 +43,6 @@ jobs:
       inputs.new_tag != '' ||
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.event.head_commit.message, 'chore: bump version -> ')
-    concurrency:
-      group: release
-      cancel-in-progress: false
     permissions:
       contents: write
     outputs:
@@ -154,9 +164,6 @@ jobs:
     needs: [version, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    concurrency:
-      group: release
-      cancel-in-progress: false
     permissions:
       contents: write
     steps:
