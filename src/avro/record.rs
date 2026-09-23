@@ -52,7 +52,7 @@ fn parse_bool(name: &str, text: &str) -> Result<bool, PluginError> {
     }
 }
 
-fn code_point_bytes(name: &str, text: &str) -> Result<Vec<u8>, PluginError> {
+pub(crate) fn code_point_bytes(name: &str, text: &str) -> Result<Vec<u8>, PluginError> {
     text.chars()
         .map(|ch| {
             u8::try_from(u32::from(ch)).map_err(|_| {
@@ -278,17 +278,22 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
         schema: &'a Schema,
         text: &str,
     ) -> Result<Node, PluginError> {
-        let FieldRule { value, rules } = parse_rules(text)?;
+        let FieldRule {
+            value,
+            rules,
+            generator,
+        } = parse_rules(text)?;
         let scalar = scalar_from_text(self.ctx.kind_of(schema), name, &value)?;
-        let rules = if scalar == Scalar::Null {
-            vec![]
+        let (rules, generator) = if scalar == Scalar::Null {
+            (vec![], None)
         } else {
-            rules
+            (rules, generator)
         };
         Ok(Node::Leaf {
             path,
             value: scalar,
             rules,
+            generator,
         })
     }
 
@@ -477,6 +482,7 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
             path,
             value: scalar,
             rules: vec![],
+            generator: None,
         })
     }
 }
@@ -599,6 +605,44 @@ mod tests {
                 "{field}"
             );
         }
+    }
+
+    #[test]
+    fn a_provider_state_expression_attaches_a_generator_to_the_leaf() {
+        use pact_models::expression_parser::DataType;
+        use pact_models::generators::Generator;
+        let schema = schema_with_field(r#"{"name":"f","type":"int"}"#);
+        let node = build(
+            &schema,
+            json!({"f": "notEmpty(fromProviderState('exp', 3))"}),
+        )
+        .unwrap();
+        let Node::Record { fields, .. } = node else {
+            panic!("record expected")
+        };
+        let Node::Leaf { generator, .. } = &fields["f"] else {
+            panic!("leaf expected")
+        };
+        assert_eq!(
+            generator,
+            &Some(Generator::ProviderStateGenerator(
+                "exp".to_string(),
+                Some(DataType::INTEGER)
+            ))
+        );
+    }
+
+    #[test]
+    fn an_expression_without_a_generator_leaves_the_leaf_generator_none() {
+        let schema = schema_with_field(r#"{"name":"f","type":"string"}"#);
+        let node = build(&schema, json!({"f": "notEmpty('x')"})).unwrap();
+        let Node::Record { fields, .. } = node else {
+            panic!("record expected")
+        };
+        let Node::Leaf { generator, .. } = &fields["f"] else {
+            panic!("leaf expected")
+        };
+        assert_eq!(generator, &None);
     }
 
     #[test]

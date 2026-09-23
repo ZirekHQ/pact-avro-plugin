@@ -2,6 +2,7 @@ pub mod avro;
 pub mod compare;
 pub mod constants;
 pub mod error;
+pub mod generate;
 pub mod interaction;
 pub mod proto_json;
 pub mod service;

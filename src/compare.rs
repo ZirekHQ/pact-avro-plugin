@@ -24,7 +24,7 @@ fn message(text: impl Into<String>) -> PluginError {
     PluginError::Message(text.into())
 }
 
-fn record_name(body: &Body, label: &str) -> Result<String, PluginError> {
+pub(crate) fn record_name(body: &Body, label: &str) -> Result<String, PluginError> {
     let Some(captures) = CONTENT_TYPE.captures(&body.content_type) else {
         return Err(message(format!(
             "{label} body content type didn't match expected template of 'content/type; record=NameOfRecord'"
