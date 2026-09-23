@@ -19,6 +19,16 @@ fn message(text: impl Into<String>) -> PluginError {
     PluginError::Message(text.into())
 }
 
+/// Builds the error returned for the RPCs pact core only calls on a plugin
+/// registered as a `Transport` — this plugin registers only as a
+/// `ContentMatcher`, so pact core never invokes `method`.
+fn not_a_transport_plugin(method: &str) -> Status {
+    Status::unimplemented(format!(
+        "Method io.pact.plugin.PactPlugin.{method} is unimplemented: this plugin registers only \
+         as a ContentMatcher, never as a Transport, so pact core does not call this RPC for it"
+    ))
+}
+
 fn config_string(
     fields: &BTreeMap<String, Value>,
     key: &str,
@@ -166,45 +176,35 @@ impl PactPlugin for PactAvroPluginService {
         &self,
         _request: Request<StartMockServerRequest>,
     ) -> Result<Response<StartMockServerResponse>, Status> {
-        Err(Status::unimplemented(
-            "Method io.pact.plugin.PactPlugin.StartMockServer is unimplemented",
-        ))
+        Err(not_a_transport_plugin("StartMockServer"))
     }
 
     async fn shutdown_mock_server(
         &self,
         _request: Request<ShutdownMockServerRequest>,
     ) -> Result<Response<ShutdownMockServerResponse>, Status> {
-        Err(Status::unimplemented(
-            "Method io.pact.plugin.PactPlugin.ShutdownMockServer is unimplemented",
-        ))
+        Err(not_a_transport_plugin("ShutdownMockServer"))
     }
 
     async fn get_mock_server_results(
         &self,
         _request: Request<MockServerRequest>,
     ) -> Result<Response<MockServerResults>, Status> {
-        Err(Status::unimplemented(
-            "Method io.pact.plugin.PactPlugin.GetMockServerResults is unimplemented",
-        ))
+        Err(not_a_transport_plugin("GetMockServerResults"))
     }
 
     async fn prepare_interaction_for_verification(
         &self,
         _request: Request<VerificationPreparationRequest>,
     ) -> Result<Response<VerificationPreparationResponse>, Status> {
-        Err(Status::unimplemented(
-            "Method io.pact.plugin.PactPlugin.PrepareInteractionForVerification is unimplemented",
-        ))
+        Err(not_a_transport_plugin("PrepareInteractionForVerification"))
     }
 
     async fn verify_interaction(
         &self,
         _request: Request<VerifyInteractionRequest>,
     ) -> Result<Response<VerifyInteractionResponse>, Status> {
-        Err(Status::unimplemented(
-            "Method io.pact.plugin.PactPlugin.VerifyInteraction is unimplemented",
-        ))
+        Err(not_a_transport_plugin("VerifyInteraction"))
     }
 }
 
@@ -252,5 +252,66 @@ mod tests {
             .await
             .expect_err("GenerateContent must return an error");
         assert_eq!(err.code(), tonic::Code::Unimplemented);
+    }
+
+    fn assert_not_a_transport_plugin_error(err: tonic::Status) {
+        assert_eq!(err.code(), tonic::Code::Unimplemented);
+        assert!(
+            err.message().contains("ContentMatcher"),
+            "expected the error to explain this plugin only registers as a ContentMatcher, got: {}",
+            err.message()
+        );
+    }
+
+    #[tokio::test]
+    async fn start_mock_server_explains_this_plugin_is_not_a_transport() {
+        let service = PactAvroPluginService;
+        let err = service
+            .start_mock_server(Request::new(StartMockServerRequest::default()))
+            .await
+            .expect_err("StartMockServer must return an error");
+        assert_not_a_transport_plugin_error(err);
+    }
+
+    #[tokio::test]
+    async fn shutdown_mock_server_explains_this_plugin_is_not_a_transport() {
+        let service = PactAvroPluginService;
+        let err = service
+            .shutdown_mock_server(Request::new(ShutdownMockServerRequest::default()))
+            .await
+            .expect_err("ShutdownMockServer must return an error");
+        assert_not_a_transport_plugin_error(err);
+    }
+
+    #[tokio::test]
+    async fn get_mock_server_results_explains_this_plugin_is_not_a_transport() {
+        let service = PactAvroPluginService;
+        let err = service
+            .get_mock_server_results(Request::new(MockServerRequest::default()))
+            .await
+            .expect_err("GetMockServerResults must return an error");
+        assert_not_a_transport_plugin_error(err);
+    }
+
+    #[tokio::test]
+    async fn prepare_interaction_for_verification_explains_this_plugin_is_not_a_transport() {
+        let service = PactAvroPluginService;
+        let err = service
+            .prepare_interaction_for_verification(Request::new(
+                VerificationPreparationRequest::default(),
+            ))
+            .await
+            .expect_err("PrepareInteractionForVerification must return an error");
+        assert_not_a_transport_plugin_error(err);
+    }
+
+    #[tokio::test]
+    async fn verify_interaction_explains_this_plugin_is_not_a_transport() {
+        let service = PactAvroPluginService;
+        let err = service
+            .verify_interaction(Request::new(VerifyInteractionRequest::default()))
+            .await
+            .expect_err("VerifyInteraction must return an error");
+        assert_not_a_transport_plugin_error(err);
     }
 }
