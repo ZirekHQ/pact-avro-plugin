@@ -5,11 +5,14 @@ dest="${1:?usage: fetch-pact-plugin-cli.sh <dest-dir>}"
 repo=pact-foundation/pact-plugins
 asset=pact-plugin-linux-x86_64.gz
 
-# The repo's "latest" release is a driver release with no assets; the CLI has its own tag series.
-tag="${PACT_PLUGIN_CLI_TAG:-$(gh release list --repo "$repo" --limit 100 --json tagName \
-  --jq '[.[].tagName | select(startswith("pact-plugin-cli-v"))][0] // empty')}"
+latest_pact_plugin_cli_tag() {
+  gh release list --repo "$repo" --limit 100 --json tagName \
+    --jq '[.[].tagName | select(startswith("pact-plugin-cli-v"))][0] // empty'
+}
+
+tag="${PACT_PLUGIN_CLI_TAG:-$(latest_pact_plugin_cli_tag)}"
 if [[ -z "$tag" ]]; then
-  echo "::error::no pact-plugin-cli release found in ${repo}" >&2
+  echo "::error::no pact-plugin-cli release found in ${repo} (its \"latest\" release is a driver release with no assets; the CLI has its own pact-plugin-cli-v* tag series)" >&2
   exit 1
 fi
 

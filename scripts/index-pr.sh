@@ -54,12 +54,18 @@ git remote add fork "https://github.com/${fork_owner}/pact-plugins.git"
 if git ls-remote --exit-code --heads fork "$branch" >/dev/null 2>&1; then
   git fetch --quiet fork "refs/heads/${branch}:refs/remotes/fork/${branch}"
 fi
+sync_fork_with_upstream_history_then_push() {
+  gh repo sync "${fork_owner}/pact-plugins" && \
+    git -c credential.helper='!gh auth git-credential' push --quiet --force-with-lease fork "$branch"
+}
+
 attempts=0
-# The clone is shallow, so the fork must already hold upstream's history or the push is rejected.
-until gh repo sync "${fork_owner}/pact-plugins" && \
-  git -c credential.helper='!gh auth git-credential' push --quiet --force-with-lease fork "$branch"; do
+until sync_fork_with_upstream_history_then_push; do
   attempts=$((attempts + 1))
-  [[ "$attempts" -lt 5 ]] || { echo "::error::could not sync the fork and push ${branch}" >&2; exit 1; }
+  [[ "$attempts" -lt 5 ]] || {
+    echo "::error::could not sync ${fork_owner}/pact-plugins with upstream and push ${branch}; the clone is shallow, so the push is rejected until the fork holds upstream's full history" >&2
+    exit 1
+  }
   sleep 5
 done
 
