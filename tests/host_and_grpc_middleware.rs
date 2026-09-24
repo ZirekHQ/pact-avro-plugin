@@ -5,6 +5,10 @@ use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tonic::codec::CompressionEncoding;
+use tonic::metadata::MetadataValue;
+use tonic::service::interceptor::InterceptedService;
+use tonic::service::Interceptor;
+use tonic::transport::Channel;
 
 fn spawn_plugin(args: &[&str], rust_log: &str) -> Child {
     Command::new(env!("CARGO_BIN_EXE_pact-avro-plugin"))
@@ -19,7 +23,7 @@ fn spawn_plugin(args: &[&str], rust_log: &str) -> Child {
 /// Reads the handshake line on a background thread so a plugin that never
 /// writes one (hangs, crashes without output) can't block the test past
 /// `timeout` — `read_line` alone gives no such bound.
-fn read_handshake_port(child: &mut Child, timeout: Duration) -> Option<u16> {
+fn read_handshake(child: &mut Child, timeout: Duration) -> Option<(u16, String)> {
     let stdout = child.stdout.take().unwrap();
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
@@ -29,7 +33,9 @@ fn read_handshake_port(child: &mut Child, timeout: Duration) -> Option<u16> {
     });
     let line = rx.recv_timeout(timeout).ok()?;
     let handshake: serde_json::Value = serde_json::from_str(line.trim()).ok()?;
-    handshake["port"].as_u64().map(|p| p as u16)
+    let port = handshake["port"].as_u64()? as u16;
+    let server_key = handshake["serverKey"].as_str()?.to_string();
+    Some((port, server_key))
 }
 
 /// Reads all stderr lines emitted within `duration` onto a background
@@ -112,10 +118,23 @@ impl Drop for ManagedChild {
     }
 }
 
-async fn connect(port: u16) -> PactPluginClient<tonic::transport::Channel> {
-    PactPluginClient::connect(format!("http://127.0.0.1:{port}"))
+async fn connect(
+    port: u16,
+    server_key: &str,
+) -> PactPluginClient<InterceptedService<Channel, impl Interceptor>> {
+    let channel = Channel::from_shared(format!("http://127.0.0.1:{port}"))
+        .expect("invalid plugin URI")
+        .connect()
         .await
-        .expect("failed to connect to the plugin")
+        .expect("failed to connect to the plugin");
+    let authorization =
+        MetadataValue::try_from(server_key).expect("serverKey is not valid metadata");
+    PactPluginClient::with_interceptor(channel, move |mut request: tonic::Request<()>| {
+        request
+            .metadata_mut()
+            .insert("authorization", authorization.clone());
+        Ok(request)
+    })
 }
 
 /// A hostname containing a space: syntactically invalid per RFC 1123, so
@@ -129,7 +148,7 @@ fn rejects_an_unbindable_host() {
     let mut child = ManagedChild(spawn_plugin(&["--host", UNBINDABLE_HOST], "info"));
 
     assert!(
-        read_handshake_port(&mut child, Duration::from_secs(3)).is_none(),
+        read_handshake(&mut child, Duration::from_secs(3)).is_none(),
         "plugin printed a handshake despite an unbindable --host, meaning the flag was ignored"
     );
 
@@ -153,11 +172,11 @@ fn rejects_an_unbindable_host() {
 #[test]
 fn negotiates_gzip_compression() {
     let mut child = ManagedChild(spawn_plugin(&[], "info"));
-    let port = read_handshake_port(&mut child, Duration::from_secs(5))
+    let (port, server_key) = read_handshake(&mut child, Duration::from_secs(5))
         .expect("plugin did not print a handshake in time");
 
     tokio::runtime::Runtime::new().unwrap().block_on(async {
-        let mut client = connect(port)
+        let mut client = connect(port, &server_key)
             .await
             .send_compressed(CompressionEncoding::Gzip)
             .accept_compressed(CompressionEncoding::Gzip);
@@ -179,11 +198,11 @@ fn negotiates_gzip_compression() {
 #[test]
 fn logs_grpc_requests_via_tracing() {
     let mut child = ManagedChild(spawn_plugin(&[], "tower_http=debug"));
-    let port = read_handshake_port(&mut child, Duration::from_secs(5))
+    let (port, server_key) = read_handshake(&mut child, Duration::from_secs(5))
         .expect("plugin did not print a handshake in time");
 
     tokio::runtime::Runtime::new().unwrap().block_on(async {
-        connect(port)
+        connect(port, &server_key)
             .await
             .update_catalogue(Catalogue::default())
             .await

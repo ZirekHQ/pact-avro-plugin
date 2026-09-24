@@ -80,9 +80,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let start = Instant::now();
     let last_access_millis = Arc::new(AtomicU64::new(0));
-    let touch_last_access = {
+    let authenticate_and_touch = {
         let last_access_millis = last_access_millis.clone();
+        let authenticate = authenticate(server_key);
         move |request: tonic::Request<()>| {
+            let request = authenticate(request)?;
             record_access(&last_access_millis, start.elapsed());
             Ok(request)
         }
@@ -91,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         PactPluginServer::new(PactAvroPluginService)
             .accept_compressed(CompressionEncoding::Gzip)
             .send_compressed(CompressionEncoding::Gzip),
-        touch_last_access,
+        authenticate_and_touch,
     );
 
     let idle_shutdown = idle_watchdog(last_access_millis, start, idle_timeout);
@@ -182,6 +184,23 @@ fn idle_watchdog(
             }
         }
     })
+}
+
+/// Builds the gRPC interceptor that rejects any call whose `authorization`
+/// metadata doesn't match the `server_key` printed at handshake, mirroring
+/// the reference protobuf plugin's `AuthInterceptor`.
+fn authenticate(
+    server_key: Uuid,
+) -> impl Fn(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> + Clone {
+    // A UUID's hyphenated string form is always valid ASCII metadata.
+    let expected = tonic::metadata::MetadataValue::try_from(server_key.to_string())
+        .expect("UUID string is always a valid metadata value");
+    move |request: tonic::Request<()>| match request.metadata().get("authorization") {
+        Some(value) if *value == expected => Ok(request),
+        _ => Err(tonic::Status::unauthenticated(
+            "missing or invalid authorization header",
+        )),
+    }
 }
 
 async fn shutdown_signal(idle: impl std::future::Future<Output = ()>) {
@@ -285,5 +304,44 @@ mod tests {
     fn port_reachable_via_loopback_rejects_other_addresses() {
         let addr: SocketAddr = "192.168.1.5:1234".parse().unwrap();
         assert!(port_reachable_via_loopback(addr).is_err());
+    }
+
+    fn request_with_authorization(value: &str) -> tonic::Request<()> {
+        let mut request = tonic::Request::new(());
+        request.metadata_mut().insert(
+            "authorization",
+            tonic::metadata::MetadataValue::try_from(value).unwrap(),
+        );
+        request
+    }
+
+    #[test]
+    fn accepts_matching_authorization_header() {
+        let server_key = Uuid::new_v4();
+        let intercept = authenticate(server_key);
+
+        assert!(intercept(request_with_authorization(&server_key.to_string())).is_ok());
+    }
+
+    #[test]
+    fn rejects_missing_authorization_header() {
+        let intercept = authenticate(Uuid::new_v4());
+
+        assert_eq!(
+            intercept(tonic::Request::new(())).unwrap_err().code(),
+            tonic::Code::Unauthenticated
+        );
+    }
+
+    #[test]
+    fn rejects_mismatched_authorization_header() {
+        let intercept = authenticate(Uuid::new_v4());
+
+        assert_eq!(
+            intercept(request_with_authorization(&Uuid::new_v4().to_string()))
+                .unwrap_err()
+                .code(),
+            tonic::Code::Unauthenticated
+        );
     }
 }
