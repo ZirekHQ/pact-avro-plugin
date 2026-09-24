@@ -154,23 +154,13 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
         }
     }
 
-    fn nullable_branch(&self, schema: &'a Schema) -> Option<&'a Schema> {
-        let Schema::Union(union) = self.ctx.resolve(schema) else {
-            return None;
-        };
-        let variants = union.variants();
-        let has_null = variants.iter().any(|v| self.ctx.kind_of(v) == Kind::Null);
-        let non_null = variants.iter().find(|v| self.ctx.kind_of(v) != Kind::Null);
-        non_null.filter(|_| variants.len() == 2 && has_null)
-    }
-
     fn union_field(
         &self,
         path: &PactFieldPath,
         field: &'a RecordField,
         config: Option<&Value>,
     ) -> Built {
-        match (self.nullable_branch(&field.schema), config) {
+        match (self.ctx.nullable_branch(&field.schema), config) {
             (Some(_), Some(value)) if is_null(value) => {
                 Ok(Node::null_leaf(path.field(&field.name)))
             }
@@ -388,6 +378,7 @@ impl<'c, 'a> RecordBuilder<'c, 'a> {
         match (schema, default) {
             (_, Json::Null) => Ok(Node::null_leaf(path)),
             (Schema::Union(_), _) => self
+                .ctx
                 .nullable_branch(schema)
                 .ok_or_else(|| one(unsupported_default(Kind::Union, name, default)))
                 .and_then(|branch| self.default_node(path, name, branch, default)),

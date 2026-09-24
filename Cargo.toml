@@ -36,3 +36,10 @@ axum = "0.8"
 libc = "0.2"
 pact_consumer = "1.4"
 pact_verifier = "1.4"
+
+[lints.clippy]
+correctness = "deny"
+suspicious = "warn"
+complexity = "warn"
+perf = "warn"
+style = "warn"

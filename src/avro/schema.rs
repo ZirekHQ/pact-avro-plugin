@@ -159,6 +159,18 @@ impl<'a> SchemaCtx<'a> {
         kind(self.resolve(schema))
     }
 
+    /// Returns the non-null branch of a two-variant `["null", T]` union, or `None` for
+    /// any other schema (not a union, or a union that isn't exactly nullable-`T`).
+    pub fn nullable_branch(&self, schema: &'a Schema) -> Option<&'a Schema> {
+        let Schema::Union(union) = self.resolve(schema) else {
+            return None;
+        };
+        let variants = union.variants();
+        let has_null = variants.iter().any(|v| self.kind_of(v) == Kind::Null);
+        let non_null = variants.iter().find(|v| self.kind_of(v) != Kind::Null);
+        non_null.filter(|_| variants.len() == 2 && has_null)
+    }
+
     pub fn find_record(&self, record_name: &str) -> Result<&'a Schema, PluginError> {
         match self.root {
             Schema::Record(_) if record_named(self.root, record_name) => Ok(self.root),
