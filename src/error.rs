@@ -49,4 +49,13 @@ mod tests {
             "Multiple errors detected and logged, please check logs"
         );
     }
+
+    #[test]
+    fn field_unsupported_type_names_the_type_field_and_value() {
+        let err = PluginError::field_unsupported_type("UNION", "status", "3");
+        assert_eq!(
+            err.to_string(),
+            "Type 'UNION' is not supported for field: 'status' with value: '3'"
+        );
+    }
 }
