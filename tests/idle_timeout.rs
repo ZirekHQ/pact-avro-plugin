@@ -4,6 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
+use tonic::metadata::MetadataValue;
 
 fn spawn_plugin(timeout_secs: &str) -> Child {
     Command::new(env!("CARGO_BIN_EXE_pact-avro-plugin"))
@@ -17,7 +18,7 @@ fn spawn_plugin(timeout_secs: &str) -> Child {
 /// Reads the handshake line on a background thread so a plugin that never
 /// writes one (hangs, crashes without output) can't block the test past
 /// `timeout` — `read_line` alone gives no such bound.
-fn read_handshake_port(child: &mut Child, timeout: Duration) -> u16 {
+fn read_handshake(child: &mut Child, timeout: Duration) -> (u16, String) {
     let stdout = child.stdout.take().unwrap();
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
@@ -30,14 +31,30 @@ fn read_handshake_port(child: &mut Child, timeout: Duration) -> u16 {
         .expect("plugin did not print a handshake in time");
     let handshake: serde_json::Value =
         serde_json::from_str(line.trim()).expect("handshake line was not valid JSON");
-    handshake["port"].as_u64().expect("handshake missing port") as u16
+    let port = handshake["port"].as_u64().expect("handshake missing port") as u16;
+    let server_key = handshake["serverKey"]
+        .as_str()
+        .expect("handshake missing serverKey")
+        .to_string();
+    (port, server_key)
 }
 
-fn send_update_catalogue(port: u16) {
+fn send_update_catalogue(port: u16, server_key: &str) {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
-        let mut client = PactPluginClient::connect(format!("http://127.0.0.1:{port}"))
+        let channel = tonic::transport::Channel::from_shared(format!("http://127.0.0.1:{port}"))
+            .expect("invalid plugin URI")
+            .connect()
             .await
             .expect("failed to connect to the plugin");
+        let authorization =
+            MetadataValue::try_from(server_key).expect("serverKey is not valid metadata");
+        let mut client =
+            PactPluginClient::with_interceptor(channel, move |mut request: tonic::Request<()>| {
+                request
+                    .metadata_mut()
+                    .insert("authorization", authorization.clone());
+                Ok(request)
+            });
         client
             .update_catalogue(Catalogue::default())
             .await
@@ -48,7 +65,7 @@ fn send_update_catalogue(port: u16) {
 #[test]
 fn shuts_down_after_the_configured_idle_timeout() {
     let mut child = spawn_plugin("1");
-    read_handshake_port(&mut child, Duration::from_secs(5));
+    read_handshake(&mut child, Duration::from_secs(5));
 
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -71,7 +88,7 @@ fn grpc_activity_resets_the_idle_clock() {
     // `started_at` rather than accumulated sleeps, so RPC/connect latency
     // can't eat into the margin on either side.
     let mut child = spawn_plugin("4");
-    let port = read_handshake_port(&mut child, Duration::from_secs(5));
+    let (port, server_key) = read_handshake(&mut child, Duration::from_secs(5));
     let started_at = Instant::now();
 
     let request_at = started_at + Duration::from_secs(2);
@@ -82,7 +99,7 @@ fn grpc_activity_resets_the_idle_clock() {
         );
         std::thread::sleep(Duration::from_millis(25));
     }
-    send_update_catalogue(port);
+    send_update_catalogue(port, &server_key);
 
     let check_at = started_at + Duration::from_secs(5);
     while Instant::now() < check_at {
