@@ -247,12 +247,36 @@ impl<'c, 'a> Comparator<'c, 'a> {
         let null = Value::Null;
         let actual = actual.unwrap_or(&null);
         let field_path = path.join(field.name.as_str());
-        match self.schemas.kind_of(&field.schema) {
-            Kind::Array => self.compare_array(field, &field_path, expected, actual),
-            Kind::Map => self.compare_map(field, &field_path, expected, actual),
-            Kind::Record => self.compare_nested(field, &field_path, expected, actual),
+        self.compare_typed(&field.name, &field.schema, &field_path, expected, actual)
+    }
+
+    fn compare_typed(
+        &self,
+        name: &str,
+        schema: &'a Schema,
+        path: &DocPath,
+        expected: &Value,
+        actual: &Value,
+    ) -> Vec<BodyItem> {
+        match self.schemas.kind_of(schema) {
+            Kind::Array => self.compare_array(name, schema, path, expected, actual),
+            Kind::Map => self.compare_map(name, schema, path, expected, actual),
+            Kind::Record => self.compare_nested(schema, path, expected, actual),
+            Kind::Union => match self.schemas.nullable_branch(schema) {
+                Some(branch) => self.compare_typed(
+                    name,
+                    branch,
+                    path,
+                    unwrap_union(expected),
+                    unwrap_union(actual),
+                ),
+                None => {
+                    tracing::warn!("Field.compare doesn't support non-nullable union types");
+                    vec![]
+                }
+            },
             kind if is_scalar(kind) => {
-                vec![self.compare_value(&field_path, kind, expected, actual)]
+                vec![self.compare_value(path, kind, expected, actual)]
             }
             other => {
                 tracing::warn!("Field.compare doesn't support type: {}", other.name());
@@ -263,7 +287,7 @@ impl<'c, 'a> Comparator<'c, 'a> {
 
     fn compare_nested(
         &self,
-        field: &'a RecordField,
+        schema: &'a Schema,
         path: &DocPath,
         expected: &Value,
         actual: &Value,
@@ -271,7 +295,7 @@ impl<'c, 'a> Comparator<'c, 'a> {
         if is_null(actual) {
             vec![expected_null(path, expected, "Record")]
         } else {
-            self.compare_record(self.schemas.resolve(&field.schema), path, expected, actual)
+            self.compare_record(self.schemas.resolve(schema), path, expected, actual)
         }
     }
 
@@ -364,18 +388,19 @@ fn keys(entries: &BTreeMap<String, Elem>) -> BTreeSet<String> {
 impl<'c, 'a> Comparator<'c, 'a> {
     fn compare_array(
         &self,
-        field: &'a RecordField,
+        name: &str,
+        schema: &'a Schema,
         path: &DocPath,
         expected: &Value,
         actual: &Value,
     ) -> Vec<BodyItem> {
-        let Schema::Array(array) = self.schemas.resolve(&field.schema) else {
+        let Schema::Array(array) = self.schemas.resolve(schema) else {
             return vec![];
         };
         let items = self.schemas.resolve(&array.items);
         match (expected, actual) {
             (Value::Array(exp), Value::Array(act)) => {
-                self.compare_lists(&field.name, items, path, exp, act)
+                self.compare_lists(name, items, path, exp, act)
             }
             (Value::Array(_), _) => vec![expected_null(path, expected, "Array")],
             _ => vec![],
@@ -476,18 +501,19 @@ impl<'c, 'a> Comparator<'c, 'a> {
 
     fn compare_map(
         &self,
-        field: &'a RecordField,
+        name: &str,
+        schema: &'a Schema,
         path: &DocPath,
         expected: &Value,
         actual: &Value,
     ) -> Vec<BodyItem> {
-        let Schema::Map(map) = self.schemas.resolve(&field.schema) else {
+        let Schema::Map(map) = self.schemas.resolve(schema) else {
             return vec![];
         };
         let values = self.schemas.resolve(&map.types);
         match (expected, actual) {
             (Value::Map(exp), Value::Map(act)) => {
-                self.compare_entries(&field.name, values, path, &sorted(exp), &sorted(act))
+                self.compare_entries(name, values, path, &sorted(exp), &sorted(act))
             }
             (Value::Map(_), _) => vec![expected_null(path, expected, "Map")],
             _ => vec![],
@@ -785,11 +811,20 @@ mod tests {
     }
 
     #[test]
-    fn union_fields_are_skipped() {
+    fn nullable_union_field_reports_mismatch_when_values_differ() {
+        let schema = schema_with_field(r#"{"name":"z","type":["null","int"]}"#);
+        let ctx = context(vec![], DiffConfig::NoUnexpectedKeys);
+        let expected = record(vec![("z", Value::Union(1, Box::new(Value::Int(1))))]);
+        let actual = record(vec![("z", Value::Union(1, Box::new(Value::Int(2))))]);
+        assert_eq!(failing(&run(&schema, &ctx, &expected, &actual)).len(), 1);
+    }
+
+    #[test]
+    fn nullable_union_field_is_silent_when_values_match() {
         let schema = schema_with_field(r#"{"name":"z","type":["null","int"]}"#);
         let ctx = context(vec![], DiffConfig::NoUnexpectedKeys);
         let value = record(vec![("z", Value::Union(1, Box::new(Value::Int(1))))]);
-        assert!(run(&schema, &ctx, &value, &value).is_empty());
+        assert!(failing(&run(&schema, &ctx, &value, &value)).is_empty());
     }
 
     #[test]
