@@ -116,6 +116,14 @@ fn expected_null(path: &DocPath, expected: &Value, type_name: &str) -> BodyItem 
     single(path, at(path, Some(show(expected)), None, message))
 }
 
+fn unexpected_value(path: &DocPath, actual: &Value, type_name: &str) -> BodyItem {
+    let message = format!(
+        "Expected null (Null) but received value '{}' ({type_name})",
+        show(actual)
+    );
+    single(path, at(path, None, Some(show(actual)), message))
+}
+
 fn lossy(bytes: Option<Bytes>) -> Option<String> {
     bytes.map(|value| String::from_utf8_lossy(&value).to_string())
 }
@@ -292,10 +300,13 @@ impl<'c, 'a> Comparator<'c, 'a> {
         expected: &Value,
         actual: &Value,
     ) -> Vec<BodyItem> {
-        if is_null(actual) {
-            vec![expected_null(path, expected, "Record")]
-        } else {
-            self.compare_record(self.schemas.resolve(schema), path, expected, actual)
+        match (is_null(expected), is_null(actual)) {
+            (true, true) => vec![],
+            (true, false) => vec![unexpected_value(path, actual, "Record")],
+            (false, true) => vec![expected_null(path, expected, "Record")],
+            (false, false) => {
+                self.compare_record(self.schemas.resolve(schema), path, expected, actual)
+            }
         }
     }
 
@@ -403,6 +414,7 @@ impl<'c, 'a> Comparator<'c, 'a> {
                 self.compare_lists(name, items, path, exp, act)
             }
             (Value::Array(_), _) => vec![expected_null(path, expected, "Array")],
+            (_, Value::Array(_)) => vec![unexpected_value(path, actual, "Array")],
             _ => vec![],
         }
     }
@@ -516,6 +528,7 @@ impl<'c, 'a> Comparator<'c, 'a> {
                 self.compare_entries(name, values, path, &sorted(exp), &sorted(act))
             }
             (Value::Map(_), _) => vec![expected_null(path, expected, "Map")],
+            (_, Value::Map(_)) => vec![unexpected_value(path, actual, "Map")],
             _ => vec![],
         }
     }
@@ -825,6 +838,80 @@ mod tests {
         let ctx = context(vec![], DiffConfig::NoUnexpectedKeys);
         let value = record(vec![("z", Value::Union(1, Box::new(Value::Int(1))))]);
         assert!(failing(&run(&schema, &ctx, &value, &value)).is_empty());
+    }
+
+    #[test]
+    fn nullable_union_record_branch_is_silent_when_both_null() {
+        let schema = schema_with_field(
+            r#"{"name":"address","type":["null",{"type":"record","name":"M","fields":[{"name":"street","type":"string"}]}]}"#,
+        );
+        let ctx = context(vec![], DiffConfig::NoUnexpectedKeys);
+        let value = record(vec![("address", Value::Union(0, Box::new(Value::Null)))]);
+        assert!(failing(&run(&schema, &ctx, &value, &value)).is_empty());
+    }
+
+    #[test]
+    fn nullable_union_record_branch_reports_mismatch_when_expected_is_null_but_actual_has_a_value()
+    {
+        let schema = schema_with_field(
+            r#"{"name":"address","type":["null",{"type":"record","name":"M","fields":[{"name":"street","type":"string"}]}]}"#,
+        );
+        let ctx = context(vec![], DiffConfig::NoUnexpectedKeys);
+        let expected = record(vec![("address", Value::Union(0, Box::new(Value::Null)))]);
+        let actual = record(vec![(
+            "address",
+            Value::Union(
+                1,
+                Box::new(record(vec![("street", Value::String("x".into()))])),
+            ),
+        )]);
+        assert_eq!(failing(&run(&schema, &ctx, &expected, &actual)).len(), 1);
+    }
+
+    #[test]
+    fn nullable_union_array_branch_is_silent_when_both_null() {
+        let schema = schema_with_field(
+            r#"{"name":"names","type":["null",{"type":"array","items":"string"}]}"#,
+        );
+        let ctx = context(vec![], DiffConfig::NoUnexpectedKeys);
+        let value = record(vec![("names", Value::Union(0, Box::new(Value::Null)))]);
+        assert!(failing(&run(&schema, &ctx, &value, &value)).is_empty());
+    }
+
+    #[test]
+    fn nullable_union_array_branch_reports_mismatch_when_expected_is_null_but_actual_has_a_value() {
+        let schema = schema_with_field(
+            r#"{"name":"names","type":["null",{"type":"array","items":"string"}]}"#,
+        );
+        let ctx = context(vec![], DiffConfig::NoUnexpectedKeys);
+        let expected = record(vec![("names", Value::Union(0, Box::new(Value::Null)))]);
+        let actual = record(vec![(
+            "names",
+            Value::Union(1, Box::new(Value::Array(vec![Value::String("a".into())]))),
+        )]);
+        assert_eq!(failing(&run(&schema, &ctx, &expected, &actual)).len(), 1);
+    }
+
+    #[test]
+    fn nullable_union_map_branch_is_silent_when_both_null() {
+        let schema =
+            schema_with_field(r#"{"name":"ages","type":["null",{"type":"map","values":"int"}]}"#);
+        let ctx = context(vec![], DiffConfig::NoUnexpectedKeys);
+        let value = record(vec![("ages", Value::Union(0, Box::new(Value::Null)))]);
+        assert!(failing(&run(&schema, &ctx, &value, &value)).is_empty());
+    }
+
+    #[test]
+    fn nullable_union_map_branch_reports_mismatch_when_expected_is_null_but_actual_has_a_value() {
+        let schema =
+            schema_with_field(r#"{"name":"ages","type":["null",{"type":"map","values":"int"}]}"#);
+        let ctx = context(vec![], DiffConfig::NoUnexpectedKeys);
+        let expected = record(vec![("ages", Value::Union(0, Box::new(Value::Null)))]);
+        let actual = record(vec![(
+            "ages",
+            Value::Union(1, Box::new(ages(&[("first", 1)]))),
+        )]);
+        assert_eq!(failing(&run(&schema, &ctx, &expected, &actual)).len(), 1);
     }
 
     #[test]
