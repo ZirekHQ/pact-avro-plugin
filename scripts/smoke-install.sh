@@ -13,7 +13,8 @@ check_install() {
   local root="$1"
   local bin="$root/avro-$version/pact-avro-plugin"
   [[ "$("$bin" --version)" == "$version" ]]
-  grep -qF "\"version\": \"$version\"" "$root/avro-$version/pact-plugin.json"
+  python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["version"] == sys.argv[2]' \
+    "$root/avro-$version/pact-plugin.json" "$version"
 }
 
 PACT_PLUGIN_DIR="$tmp/cli" "$tmp/pact-plugin-cli" -y install "$repo/releases/tag/$tag"
