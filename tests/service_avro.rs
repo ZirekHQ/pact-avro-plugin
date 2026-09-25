@@ -211,6 +211,59 @@ async fn compare_contents_matches_when_the_pact_level_configuration_is_missing()
         .all(|item| item.mismatches.is_empty()));
 }
 
+/// The exact shape of the merge in pact-jvm#1938: `pactConfiguration` still holds the first
+/// `@Pact` method's schema, but not the second's, whose interaction must fall back to its
+/// own `avroSchema` rather than fail the lookup entirely.
+#[tokio::test]
+async fn compare_contents_matches_the_second_of_two_schemas_missing_from_a_merged_pacts_configuration(
+) {
+    let first = PactAvroPluginService
+        .configure_interaction(configure_request(json!({
+            "pact:avro": fixture("item.avsc"),
+            "pact:record-name": "Item",
+            "pact:content-type": "avro/binary",
+            "name": "notEmpty('Item-41')",
+            "id": "notEmpty('41')"
+        })))
+        .await
+        .unwrap()
+        .into_inner();
+    let second = PactAvroPluginService
+        .configure_interaction(configure_request(complex_config()))
+        .await
+        .unwrap()
+        .into_inner();
+    let merged_pact_configuration = first.plugin_configuration.unwrap().pact_configuration;
+
+    let interaction = second.interaction[0].clone();
+    let plugin_configuration = PluginConfiguration {
+        interaction_configuration: interaction
+            .plugin_configuration
+            .unwrap()
+            .interaction_configuration,
+        pact_configuration: merged_pact_configuration,
+    };
+    let body = interaction.contents.unwrap();
+    let request = CompareContentsRequest {
+        expected: Some(body.clone()),
+        actual: Some(body),
+        allow_unexpected_keys: false,
+        rules: interaction.rules,
+        plugin_configuration: Some(plugin_configuration),
+    };
+    let response = PactAvroPluginService
+        .compare_contents(Request::new(request))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(response.error, "");
+    assert!(!response.results.is_empty());
+    assert!(response
+        .results
+        .values()
+        .all(|item| item.mismatches.is_empty()));
+}
+
 /// A pact published before this plugin started embedding `avroSchema` on the interaction
 /// itself must still verify: the `schemaKey`/`pact_configuration` lookup stays intact.
 #[tokio::test]
