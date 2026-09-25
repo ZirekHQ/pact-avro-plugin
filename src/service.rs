@@ -71,6 +71,12 @@ fn schema_text(configuration: Option<&PluginConfiguration>) -> Result<String, Pl
         &configuration.interaction_configuration,
         "Interaction configuration not found",
     )?;
+    // pact-jvm can merge multiple @Pact methods into one pact keeping only the first
+    // method's pact_configuration (pact-foundation/pact-jvm#1938); the fields below fall
+    // back to that pact-wide lookup only when the interaction has no schema of its own.
+    if let Ok(inline) = config_string(&interaction.fields, AVRO_SCHEMA, "") {
+        return Ok(inline);
+    }
     let key = config_string(
         &interaction.fields,
         SCHEMA_KEY,
