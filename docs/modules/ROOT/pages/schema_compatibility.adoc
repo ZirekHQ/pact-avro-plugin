@@ -4,12 +4,12 @@ This page explains how the plugin identifies, embeds, and resolves Avro schemas 
 
 == Schemas are embedded in the Pact file, by hash
 
-When a consumer test configures an interaction, the plugin hashes the resolved Avro schema (MD5, base16-encoded) and uses that hash as a schema key. The full schema text is written into the Pact file's plugin configuration under that key, and the interaction itself only stores the key plus the record name:
+When a consumer test configures an interaction, the plugin hashes the resolved Avro schema (MD5, base16-encoded) and uses that hash as a schema key. The full schema text is written both into the Pact file's pact-wide plugin configuration under that key, and directly onto the interaction itself, alongside the record name and key:
 
+* `pluginConfiguration.interactionConfiguration` -> `{ "record": "<RecordName>", "schemaKey": "<schemaKey>", "avroSchema": "<schema JSON>" }`
 * `pluginConfiguration.pactConfiguration` -> `{ "<schemaKey>": { "avroSchema": "<schema JSON>" } }`
-* `pluginConfiguration.interactionConfiguration` -> `{ "record": "<RecordName>", "schemaKey": "<schemaKey>" }`
 
-During verification, the plugin does not re-read the `.avsc` file. It looks up the schema by `schemaKey` inside the Pact file itself and parses that. This means the schema a consumer test was written against travels with the contract, and a provider is verified against the exact schema the consumer used, not whatever `.avsc` file happens to be on disk at verification time.
+During verification, the plugin does not re-read the `.avsc` file. It reads the interaction's own `avroSchema` first, falling back to looking the schema up by `schemaKey` in the Pact file's `pactConfiguration` only if the interaction doesn't carry it (see xref:troubleshooting.adoc[] for why a pact-jvm consumer test can produce a Pact file without one). Either way, the schema a consumer test was written against travels with the contract, and a provider is verified against the exact schema the consumer used, not whatever `.avsc` file happens to be on disk at verification time.
 
 A practical consequence: two interactions built from schemas that produce different serialised text get two independent entries in the Pact file, even if both use the same record name. Editing a `.avsc` file changes its hash, so previously generated Pact files are unaffected until the consumer test is re-run against the new schema.
 

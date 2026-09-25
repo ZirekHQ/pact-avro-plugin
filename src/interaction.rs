@@ -74,6 +74,7 @@ fn generators_of(node: &Node) -> HashMap<String, crate::pact_plugin::Generator> 
 fn interaction_response(
     record_name: &str,
     hash: &str,
+    schema_text: &str,
     node: &Node,
     body: Vec<u8>,
 ) -> InteractionResponse {
@@ -89,6 +90,7 @@ fn interaction_response(
             interaction_configuration: Some(struct_of(vec![
                 (RECORD, text_value(record_name)),
                 (SCHEMA_KEY, text_value(hash)),
+                (AVRO_SCHEMA, text_value(schema_text)),
             ])),
             pact_configuration: None,
         }),
@@ -100,6 +102,7 @@ fn build_interaction(
     schema: &Schema,
     record_name: &str,
     hash: &str,
+    schema_text: &str,
     config: &Struct,
 ) -> Result<InteractionResponse, Vec<PluginError>> {
     let ctx = SchemaCtx::new(schema).map_err(single)?;
@@ -107,7 +110,13 @@ fn build_interaction(
     let node = RecordBuilder::new(&ctx).build(record, &config.fields)?;
     let value = to_value(&ctx, record, &node).map_err(single)?;
     let body = encode(&ctx, record, value).map_err(single)?;
-    Ok(interaction_response(record_name, hash, &node, body))
+    Ok(interaction_response(
+        record_name,
+        hash,
+        schema_text,
+        &node,
+        body,
+    ))
 }
 
 pub fn build(
@@ -118,7 +127,7 @@ pub fn build(
     let schema_text =
         serde_json::to_string(schema).map_err(|error| PluginError::Exception(error.to_string()))?;
     let hash = base16_hash(&schema_text);
-    build_interaction(schema, record_name, &hash, config)
+    build_interaction(schema, record_name, &hash, &schema_text, config)
         .map(|interaction| ConfigureInteractionResponse {
             error: String::new(),
             interaction: vec![interaction],
@@ -218,6 +227,26 @@ mod tests {
         assert_eq!(
             value_to_json(&interaction_config.fields["record"]),
             json!("Item")
+        );
+    }
+
+    #[test]
+    fn the_interaction_carries_its_own_schema_alongside_the_pact_level_lookup() {
+        let schema = item_schema();
+        let response = build(
+            &config(json!({"name": "notEmpty('a')", "id": "notEmpty('1')"})),
+            &schema,
+            "Item",
+        )
+        .unwrap();
+        let interaction_config = response.interaction[0]
+            .plugin_configuration
+            .as_ref()
+            .and_then(|c| c.interaction_configuration.clone())
+            .unwrap();
+        assert_eq!(
+            value_to_json(&interaction_config.fields["avroSchema"]),
+            json!(serde_json::to_string(&schema).unwrap())
         );
     }
 
