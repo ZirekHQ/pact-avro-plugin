@@ -31,14 +31,14 @@ The https://github.com/pact-foundation/pact-plugins/tree/main/cli[pact-plugin-cl
 
 [source,shell]
 ----
-pact-plugin-cli -y install https://github.com/ZirekHQ/pact-avro-plugin/releases/latest
+pact-plugin-cli -y install https://github.com/hominux/pact-avro-plugin/releases/latest
 ----
 
 === Manual
 
 [source,shell]
 ----
-curl -fsSL https://github.com/ZirekHQ/pact-avro-plugin/releases/latest/download/install-plugin.sh | sh
+curl -fsSL https://github.com/hominux/pact-avro-plugin/releases/latest/download/install-plugin.sh | sh
 ----
 
 INFORMATION:: Set the `PACT_PLUGIN_DIR` environment variable to change the default plugin directory (`$HOME/.pact/plugins`).

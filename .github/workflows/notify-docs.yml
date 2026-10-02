@@ -60,14 +60,14 @@ jobs:
         with:
           client-id: ${{ secrets.DOCS_APP_CLIENT_ID }}
           private-key: ${{ secrets.DOCS_APP_PRIVATE_KEY }}
-          owner: ZirekHQ
-          repositories: ZirekHQ.github.io
+          owner: hominux
+          repositories: hominux.github.io
           permission-contents: write
 
       - name: Dispatch update to docs site
         uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
         with:
           token: ${{ steps.app-token.outputs.token }}
-          repository: ZirekHQ/ZirekHQ.github.io
+          repository: hominux/hominux.github.io
           event-type: update-docs
           client-payload: ${{ steps.payload.outputs.json }}

@@ -4,7 +4,7 @@ set -euo pipefail
 index="${1:?usage: index-add-version.sh <repository.index> <vX.Y.Z>}"
 tag="${2:?usage: index-add-version.sh <repository.index> <vX.Y.Z>}"
 cli="${PACT_PLUGIN_CLI:?set PACT_PLUGIN_CLI to the pact-plugin-cli binary}"
-repo_url=https://github.com/ZirekHQ/pact-avro-plugin
+repo_url=https://github.com/hominux/pact-avro-plugin
 entry_header='^\[entries\.[^].]+\]$'
 
 if ! [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then

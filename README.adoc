@@ -1,4 +1,4 @@
-= Pact Avro Plugin image:https://sonarcloud.io/api/project_badges/measure?project=ZirekHQ_pact-avro-plugin&metric=coverage[Coverage,link=https://sonarcloud.io/summary/new_code?id=ZirekHQ_pact-avro-plugin]
+= Pact Avro Plugin image:https://sonarcloud.io/api/project_badges/measure?project=hominux_pact-avro-plugin&metric=coverage[Coverage,link=https://sonarcloud.io/summary/new_code?id=hominux_pact-avro-plugin]
 
 ____
 Pact plugin for testing messages serialised by https://avro.apache.org/docs[Apache Avro] using the https://docs.pact.io[Pact] contract testing framework.
@@ -22,6 +22,6 @@ This plugin is released under the *MIT License* and is copyright © 2021-23 Ali 
 
 If this repository saves you time and effort, please consider supporting it!
 
-* ⭐ https://github.com/ZirekHQ/pact-avro-plugin[Star on GitHub]
-* 🐦 https://twitter.com/intent/tweet?text=pact-avro-plugin%20-%20Pact%20contract%20testing%20plugin%20for%20Apache%20Avro&url=https%3A%2F%2Fgithub.com%2FZirekHQ%2Fpact-avro-plugin[Share on Twitter]
+* ⭐ https://github.com/hominux/pact-avro-plugin[Star on GitHub]
+* 🐦 https://twitter.com/intent/tweet?text=pact-avro-plugin%20-%20Pact%20contract%20testing%20plugin%20for%20Apache%20Avro&url=https%3A%2F%2Fgithub.com%2Fhominux%2Fpact-avro-plugin[Share on Twitter]
 * 💖 https://opencollective.com/zirek[Support on Open Collective]

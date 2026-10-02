@@ -2,7 +2,7 @@
 set -eu
 
 VERSION="@VERSION@"
-BASE_URL="${PACT_AVRO_PLUGIN_BASE_URL:-https://github.com/ZirekHQ/pact-avro-plugin/releases/download/v${VERSION}}"
+BASE_URL="${PACT_AVRO_PLUGIN_BASE_URL:-https://github.com/hominux/pact-avro-plugin/releases/download/v${VERSION}}"
 PLUGIN_DIR="${PACT_PLUGIN_DIR:-$HOME/.pact/plugins}/avro-${VERSION}"
 
 fail() { echo "ERROR: $1" >&2; exit 1; }
