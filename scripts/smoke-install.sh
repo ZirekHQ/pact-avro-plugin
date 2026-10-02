@@ -3,7 +3,7 @@ set -euo pipefail
 
 tag="${1:?usage: smoke-install.sh <vX.Y.Z>}"
 version="${tag#v}"
-repo=https://github.com/ZirekHQ/pact-avro-plugin
+repo=https://github.com/hominux/pact-avro-plugin
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

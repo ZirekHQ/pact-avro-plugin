@@ -76,7 +76,7 @@ fi
 
 body="Adds avro ${version} to the repository index.${jvm_note}
 
-Release: https://github.com/ZirekHQ/pact-avro-plugin/releases/tag/${tag}
+Release: https://github.com/hominux/pact-avro-plugin/releases/tag/${tag}
 
 Generated with \`pact-plugin-cli repository add-plugin-version git-hub\` and checked with \`repository validate\`."
 gh pr create --repo "$upstream" --base main --head "${fork_owner}:${branch}" \
