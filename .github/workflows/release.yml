@@ -45,8 +45,7 @@ jobs:
             exit 1
           fi
           release=true
-          if git ls-remote --exit-code --tags origin "refs/tags/v${version}" >/dev/null 2>&1 \
-             || gh release view "v${version}" >/dev/null 2>&1; then
+          if gh release view "v${version}" >/dev/null 2>&1; then
             release=false
           fi
           {
@@ -185,8 +184,15 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag -a "v${VERSION}" -m "Release v${VERSION}"
-          git push origin "refs/tags/v${VERSION}"
+          existing="$(git ls-remote origin "refs/tags/v${VERSION}^{}" | cut -f1)"
+          [ -n "$existing" ] || existing="$(git ls-remote origin "refs/tags/v${VERSION}" | cut -f1)"
+          if [ -z "$existing" ]; then
+            git tag -a "v${VERSION}" -m "Release v${VERSION}"
+            git push origin "refs/tags/v${VERSION}"
+          elif [ "$existing" != "$GITHUB_SHA" ]; then
+            echo "::error::v${VERSION} exists on origin at ${existing}, not ${GITHUB_SHA}"
+            exit 1
+          fi
       - name: Create release
         if: ${{ needs.plan.outputs.dry_run != 'true' }}
         env:
