@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-tag="${1:?usage: index-pr.sh <vX.Y.Z>  (GH_TOKEN: a token that can push to your fork of pact-plugins)}"
+tag="${1:?usage: index-pr.sh <vX.Y.Z>  (GH_TOKEN: a token that can push to your fork of pact-plugins; FORK_OWNER: the account or org holding the fork, default the token user)}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 upstream=pact-foundation/pact-plugins
 version="${tag#v}"
@@ -9,7 +9,8 @@ branch="add-avro-${version}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-fork_owner="$(gh api user --jq .login)"
+token_user="$(gh api user --jq .login)"
+fork_owner="${FORK_OWNER:-$token_user}"
 if [[ "$(gh pr list --repo "$upstream" --head "${fork_owner}:${branch}" --state open --json number --jq length)" -gt 0 ]]; then
   echo "an open pull request for ${branch} already exists; nothing to do"
   exit 0
@@ -38,8 +39,8 @@ if [[ "$status" == present ]]; then
 fi
 
 user_id="$(gh api user --jq .id)"
-git config user.name "$fork_owner"
-git config user.email "${user_id}+${fork_owner}@users.noreply.github.com"
+git config user.name "$token_user"
+git config user.email "${user_id}+${token_user}@users.noreply.github.com"
 git add repository/repository.index repository/repository.index.sha256
 git commit --quiet -m "Add avro ${version} version"
 git diff --stat HEAD~1
@@ -49,7 +50,10 @@ if [[ -n "${INDEX_PR_DRY_RUN:-}" ]]; then
   exit 0
 fi
 
-gh repo view "${fork_owner}/pact-plugins" >/dev/null 2>&1 || gh repo fork "$upstream" --clone=false
+if ! gh repo view "${fork_owner}/pact-plugins" >/dev/null 2>&1; then
+  [[ "$fork_owner" == "$token_user" ]] || { echo "::error::${fork_owner}/pact-plugins does not exist; fork ${upstream} into ${fork_owner} first" >&2; exit 1; }
+  gh repo fork "$upstream" --clone=false
+fi
 git remote add fork "https://github.com/${fork_owner}/pact-plugins.git"
 if git ls-remote --exit-code --heads fork "$branch" >/dev/null 2>&1; then
   git fetch --quiet fork "refs/heads/${branch}:refs/remotes/fork/${branch}"

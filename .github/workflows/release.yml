@@ -234,6 +234,7 @@ jobs:
       - name: Open the pull request
         env:
           GH_TOKEN: ${{ secrets.PACT_PLUGINS_PR_TOKEN }}
+          FORK_OWNER: ${{ vars.PACT_PLUGINS_FORK_OWNER }}
           VERSION: ${{ needs.plan.outputs.version }}
         run: bash scripts/index-pr.sh "v${VERSION}"
 
