@@ -76,7 +76,7 @@ cargo test --test e2e_consumer --test e2e_provider -- --include-ignored
 
 === Releasing
 
-Releases are cut by running the "Prepare release" workflow. It computes the next version from Conventional Commit subjects since the last tag and opens a `chore: bump version -> X.Y.Z` pull request as the `hominux-automation` GitHub App (org secrets `AUTOMATION_APP_CLIENT_ID` and `AUTOMATION_APP_PRIVATE_KEY`), so the PR runs CI and a maintainer can approve it.
+Releases are cut by running the "Prepare release" workflow. It computes the next version from Conventional Commit subjects since the last tag and opens a `chore: bump version -> X.Y.Z` pull request as the `hominux-automation` GitHub App (org secrets `AUTOMATION_APP_CLIENT_ID` and `AUTOMATION_APP_PRIVATE_KEY`), so the PR triggers CI workflows, whose author-guarded jobs are skipped, and a maintainer can approve it.
 Only a maintainer (admin or maintain role) can run "Prepare release". Squash- or rebase-merge the pull request: a merge commit does not match the release trigger. The merge runs "Release" with no further approval: it tags and publishes. Running "Release" by hand is always a dry run.
 If a release run fails after the tag is pushed, cut a patch release: the plan job skips any version whose tag already exists. If the post-publish smoke test fails, fix on `main` and cut a patch release; never delete or move a published tag or release.
 After the smoke test passes, the run opens a pull request against https://github.com/pact-foundation/pact-plugins[pact-foundation/pact-plugins] that adds the version to its plugin index; until that merges, `pact-plugin-cli install avro` does not see the release.
