@@ -76,12 +76,11 @@ cargo test --test e2e_consumer --test e2e_provider -- --include-ignored
 
 === Releasing
 
-Releases are cut by running the "Prepare release" workflow. It computes the next version from Conventional Commit subjects since the last tag and opens a `chore: bump version -> X.Y.Z` pull request as the `hominux-automation` GitHub App (org secrets `AUTOMATION_APP_CLIENT_ID` and `AUTOMATION_APP_PRIVATE_KEY`), so the PR runs CI and a maintainer can approve it.
-Squash- or rebase-merge that pull request: a merge commit does not match the release trigger, so nothing is tagged or published. The merge tags the commit and publishes the release.
-To release a version outside the computed bump, run "Prepare release" with `new_tag` set to `vX.Y.Z`; the run needs approval in the `release` environment.
-If a release run fails after the tag is pushed, re-run the failed workflow run: tagging is idempotent, and a version whose release already exists is refused.
-If the post-publish smoke test fails, fix on `main` and cut a patch release; never delete or move a published tag or release.
+Releases are cut by running the "Prepare release" workflow. It computes the next version from Conventional Commit subjects since the last tag and opens a `chore: bump version -> X.Y.Z` pull request as the `hominux-automation` GitHub App (org secrets `AUTOMATION_APP_CLIENT_ID` and `AUTOMATION_APP_PRIVATE_KEY`), so the PR triggers CI workflows, whose author-guarded jobs are skipped, and a maintainer can approve it.
+Only a maintainer (admin or maintain role) can run "Prepare release". Squash- or rebase-merge the pull request: a merge commit does not match the release trigger. The merge runs "Release" with no further approval: it tags and publishes. Running "Release" by hand is always a dry run.
+If a release run fails after the tag is pushed, cut a patch release: the plan job skips any version whose tag already exists. If the post-publish smoke test fails, fix on `main` and cut a patch release; never delete or move a published tag or release.
 After the smoke test passes, the run opens a pull request against https://github.com/pact-foundation/pact-plugins[pact-foundation/pact-plugins] that adds the version to its plugin index; until that merges, `pact-plugin-cli install avro` does not see the release.
-The job needs the `PACT_PLUGINS_PR_TOKEN` secret and never fails the release run. Without the token, or to retry, run `GH_TOKEN=<token> bash scripts/index-pr.sh vX.Y.Z`.
+The `PACT_PLUGINS_PR_TOKEN` secret (a fine-grained token for your pact-plugins fork) lives in the `release` environment. The `preflight` job fails a real run when it is missing, before anything is tagged. To retry only the index pull request, run `GH_TOKEN=<token> bash scripts/index-pr.sh vX.Y.Z`.
+CI skips the bump pull request: each PR-triggered job carries an `if:` guard on the PR author. A job-level skip reports as passing, so required checks stay satisfied; `[skip ci]` would leave them pending.
 
 include::docs/README.adoc[]

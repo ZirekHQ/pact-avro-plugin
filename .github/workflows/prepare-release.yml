@@ -2,22 +2,36 @@ name: Prepare release
 
 on:
   workflow_dispatch:
-    inputs:
-      new_tag:
-        description: "Skip the PR: release this exact vX.Y.Z tag (requires approval)"
-        required: false
-        type: string
-      dry_run:
-        description: "Publish nothing (only with new_tag)"
-        required: false
-        type: boolean
-        default: false
 
 permissions: {}
 
 jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Require a maintainer on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.triggering_actor }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$REF" != 'refs/heads/main' ]; then
+            echo "::error::Releases are prepared from main, not $REF"
+            exit 1
+          fi
+          role=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .role_name)
+          case "$role" in
+            admin|maintain) echo "$ACTOR has role $role" ;;
+            *) echo "::error::$ACTOR has role '$role'; preparing a release needs admin or maintain"; exit 1 ;;
+          esac
+
   prepare:
-    if: inputs.new_tag == ''
+    needs: authorize
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -76,22 +90,3 @@ jobs:
           gh pr create --base main --head "$branch" \
             --title "chore: bump version -> ${VERSION}" \
             --body "Computed by prepare-release.yml from Conventional Commit subjects since the last tag (scripts/next-version.sh). Merging this releases v${VERSION}: release.yml tags the merge commit and publishes in the same run."
-
-  gate:
-    if: inputs.new_tag != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment: release
-    steps:
-      - run: echo "approved"
-
-  release-now:
-    needs: gate
-    permissions:
-      contents: write
-    uses: ./.github/workflows/release.yml # zizmor: ignore[self-repository] the $/ form is untested until release.yml has run on main
-    with:
-      new_tag: ${{ inputs.new_tag }}
-      dry_run: ${{ inputs.dry_run == true }}
-    secrets:
-      PACT_PLUGINS_PR_TOKEN: ${{ secrets.PACT_PLUGINS_PR_TOKEN }}

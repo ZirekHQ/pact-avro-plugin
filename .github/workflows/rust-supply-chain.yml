@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   deny:
+    if: github.event.pull_request.user.login != 'hominux-automation[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
